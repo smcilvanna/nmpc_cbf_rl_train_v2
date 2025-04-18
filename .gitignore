@@ -1,0 +1,20 @@
+#Ignore dirs
+build/
+devel/
+data/
+src/.old/
+src/.temp/
+src/__pycache__/
+*.vscode/
+
+
+#Ignore file types
+*.jpg
+*.bag
+*.old
+*.pyc
+*.swp
+*.log
+
+#Ignore other files
+world/nhat.world
