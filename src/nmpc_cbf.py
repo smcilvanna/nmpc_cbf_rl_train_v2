@@ -84,14 +84,16 @@ class NMPC_CBF_MULTI_N:
 
         # Relaxed CBF for obstacles
         for i in range(N):
-            # for j in range(self.nObs):            
-            st = solver["stateHorizon"][i,0:2]          # current state xy position
-            st_next = solver["stateHorizon"][i+1,0:2]   # next state xy position                
+            st      = ca.repmat(solver["stateHorizon"][i  ,0:2],self.nObs,1)    # current state xy position
+            st_next = ca.repmat(solver["stateHorizon"][i+1,0:2],self.nObs,1)    # next state xy position
             # Compute h and h_next for ALL obstacles simultaneously
-            h = ca.norm_2(st.T - solver["obstacles"][:, 0:2].T) - (self.vehRad + solver["obstacles"][:, 2])
-            h_next = ca.norm_2(st_next.T - solver["obstacles"][:, 0:2].T) - (self.vehRad + solver["obstacles"][:, 2])
+            obs = solver["obstacles"][:, 0:2]
+            temp = (     st - obs)
+            h      = ca.sqrt( ca.sum1(temp**2) ) - (self.vehRad + solver["obstacles"][:, 2])
+            h_next = ca.sqrt( ca.sum1((st_next - solver["obstacles"][:, 0:2])**2) ) - (self.vehRad + solver["obstacles"][:, 2])
             # Apply constraints for all obstacles at horizon step i
-            solver["opt"].subject_to(h_next - (1 - solver["cbfParms"]) * h >= 0) 
+            solver["opt"].subject_to(h_next - (1 - solver["cbfParms"]) * h >= 0)
+
 
         # boundary of state and control input
         solver["opt"].subject_to(solver["opt"].bounded(self.min_x,     solver["stateHorizon"][:,0], self.max_x))
