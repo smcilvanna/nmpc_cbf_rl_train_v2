@@ -7,57 +7,45 @@ import casadi as ca
 class NMPC_CBF_MULTI_N:
     def __init__(self, dt, nRange, nObs):
         
-        self.dt = dt                            # time step
-        self.nRange = nRange                        # horizon length
-        self.nObs = nObs                            # number of obstacles
+        self.dt = dt                                    # time step
+        self.nRange = nRange                            # horizon length
+        self.nObs = nObs                                # number of obstacles
         self.wStates = np.diag([5.0, 5.0, 0.5])         # Weight matrix for states
-        self.wCtrls = np.diag([5.0, 0.1])              # Weight matrix for controls
-        self.wTerm = 10**4*np.diag([1.0, 1.0, 0.001]) # Weight matrix for Terminal state
-        self.min_x = -100.0
-        self.max_x =  100.0
-        self.min_y = -100.0
-        self.max_y =  100.0
-        self.min_theta = -np.inf
-        self.max_theta =  np.inf
-        self.min_v = -1.0
-        self.max_v =  1.0
-        self.min_omega = -0.7854
-        self.max_omega =  0.7854
-        self.max_dv = 1.0
-        self.max_domega = 3.14/7
-        self.vehRad = 0.55
-        self.solvers = []
-        self.setup_controllers()
-        # self.cbfParms = cbfParms
-        # self.obstacles = obstacles
-        # self.nObs = len(self.SO[:, 0])
-        # Initial value for state and control input
-        # self.next_states = np.ones((self.nRange+1, 3))*init_pos
-        # self.u0 = np.zeros((self.nRange, 2))
-
+        self.wCtrls = np.diag([5.0, 0.1])               # Weight matrix for controls
+        self.wTerm = 10**4*np.diag([1.0, 1.0, 0.001])   # Weight matrix for Terminal state
+        self.min_x = -100.0                             # State bounds
+        self.max_x =  100.0                             
+        self.min_y = -100.0                             
+        self.max_y =  100.0                             
+        self.min_theta = -np.inf                        
+        self.max_theta =  np.inf                        
+        self.min_v = -1.0                               # Linear velocity control bounds
+        self.max_v =  1.0                               
+        self.min_omega = -0.7854                        # Angular velocity control bounds
+        self.max_omega =  0.7854                        
+        self.max_dv = 1.0                               # Acceleration bounds (not used)
+        self.max_domega = 3.14/7                        
+        self.vehRad = 0.55                              # Vehicle clearance radius for obstacle collision detection
+        self.solvers = []                               # Init empty solver stack for variable N solvers
+        self.setup_controllers()                        # Create solvers from nRange list input arg
 
     def setup_controllers(self):
-        for N in range(self.nRange):
+        for N in self.nRange:
             self.setup_controller(N)
     
     def setup_controller(self, N):
         
         solver = {
             "opt" : ca.Opti(),
-            "N"   : N                                               #     x = stateHorizon[:,0]
-        }                                                           #     y = stateHorizon[:,1]
-        solver["stateHorizon"] = solver["opt"].variable(N+1, 3)     # theta = stateHorizon[:,2]
-        solver["ctrlHorizon"] = solver["opt"].variable(N, 2)        #     v = ctrlHorizon[:,0]
-                                                                    # omega = ctrlHorizon[:,1]
+            "N"   : N
+        }
+        solver["stateHorizon"] = solver["opt"].variable(N+1, 3)     # x:[:,0] | y:[:,1] | theta:[:,3]
+        solver["ctrlHorizon"] = solver["opt"].variable(N, 2)        # v:[:,0] | omega:[:,1]
 
         # kinematic model definition f
         solver["f"] = lambda x_, u_: ca.vertcat(*[ca.cos(x_[2])*u_[0], ca.sin(x_[2])*u_[0], u_[1]])
-        
-        # these parameters are the reference trajectories of the state and inputs (removed for point tracking only)
-        # solver["u_ref"] = solver["opt"].parameter(N, 2)
-        # solver["x_ref"] = solver["opt"].parameter(self.N+2, 3)
-        
-        # parameters
+
+        # parameters to be passsed at solve time
         solver["stateNow"]  = solver["opt"].parameter(1, 3)
         solver["stateTgt"]  = solver["opt"].parameter(1, 3)
         solver["obstacles"] = solver["opt"].parameter(self.nObs,3)
@@ -88,22 +76,12 @@ class NMPC_CBF_MULTI_N:
         for i in range(N):
             for j in range(self.nObs):            
                 st = solver["stateHorizon"][i,0:2]          # current state xy position
-                st_next = solver["stateHorizon"][i+1,0:2]   # next state xy position
-
-                # h      = (     st[0]-solver["obstacles"][j,0])**2 + (st[1]-solver["obstacles"][j,1])**2-(self.vehRad+solver["obstacles"][j,2])**2
-                # h_next = (st_next[0]-solver["obstacles"][j,0])**2 + (st_next[1]-self.SO[j,1])**2-(self.vehRad+self.SO[j,2])**2
-                
+                st_next = solver["stateHorizon"][i+1,0:2]   # next state xy position                
                 # relaxed cbf components
                 h      = ca.norm_2(st      - solver["obstacles"][j,0:2]) - (self.vehRad + solver["obstacles"][j,2])
                 h_next = ca.norm_2(st_next - solver["obstacles"][j,0:2]) - (self.vehRad + solver["obstacles"][j,2])
                 # relaxed cbf constraint for obstacle j at horizon step i
                 solver["opt"].subject_to( h_next - (1- solver["cbfParms"][j] )*h >= 0) 
-
-        # # constraint the change of velocity (removed)
-        # for i in range(self.N-1):
-        #     dvel = (solver["ctrlHorizon"][i+1,:] - solver["ctrlHorizon"][i,:])/self.dt
-        #     self.opt.subject_to(self.opt.bounded(-self.max_dv, dvel[0], self.max_dv))
-        #     self.opt.subject_to(self.opt.bounded(-self.max_domega, dvel[1], self.max_domega))
 
         # boundary of state and control input
         solver["opt"].subject_to(solver["opt"].bounded(self.min_x,     solver["stateHorizon"][:,0], self.max_x))
@@ -120,7 +98,7 @@ class NMPC_CBF_MULTI_N:
                         'ipopt.acceptable_obj_change_tol':1e-6}
         
         solver["opt"].solver('ipopt', opts_setting)
-        self.solvers.append(solver)     # add this solver to the solver stack
+        self.solvers.append(solver)     # append this N horizon solver to the solver stack
     
     def solve(self, next_trajectories, next_controls):
         
@@ -153,7 +131,7 @@ class NMPC_CBF_MULTI_N:
 
 
 if __name__ == "__main__":
-    nmpc = NMPC_CBF_MULTI_N(0.1, 10, 3)
+    nmpc = NMPC_CBF_MULTI_N(0.1, [10, 20], 3)
     print("NMPC_CBF_MULTI_N class initialized successfully.")
     # # Example usage
     # state_now = np.array([0.0, 0.0, 0.0])
