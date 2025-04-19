@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import numpy as np
-import math
 import casadi as ca
 
 
@@ -43,22 +42,18 @@ class NMPC_CBF_MULTI_N:
     
     def setup_controller(self, N):
         
-        
         solver = {
-            "opt" : ca.Opti()
-        }
-        solver["stateHorizon"] = self.opt.variable(N+1, 3)
-                            #     x = opt_states[:,0]
-                            #     y = opt_states[:,1]
-                            # theta = opt_states[:,2]
-        solver["ctrlHorizon"] = self.opt.variable(N, 2)
-                            #     v = opt_controls[:,0]
-                            # omega = opt_controls[:,1]
+            "opt" : ca.Opti(),
+            "N"   : N                                               #     x = stateHorizon[:,0]
+        }                                                           #     y = stateHorizon[:,1]
+        solver["stateHorizon"] = solver["opt"].variable(N+1, 3)     # theta = stateHorizon[:,2]
+        solver["ctrlHorizon"] = solver["opt"].variable(N, 2)        #     v = ctrlHorizon[:,0]
+                                                                    # omega = ctrlHorizon[:,1]
+
+        # kinematic model definition f
+        solver["f"] = lambda x_, u_: ca.vertcat(*[ca.cos(x_[2])*u_[0], ca.sin(x_[2])*u_[0], u_[1]])
         
-        # kinematic model
-        solver["f"] = lambda x_, u_: ca.vertcat(*[ca.cos(x_[2])*u_[0], ca.sin(x_[2])*u_[0], u_[1]]),
-        
-        # these parameters are the reference trajectories of the state and inputs
+        # these parameters are the reference trajectories of the state and inputs (removed for point tracking only)
         # solver["u_ref"] = solver["opt"].parameter(N, 2)
         # solver["x_ref"] = solver["opt"].parameter(self.N+2, 3)
         
@@ -71,10 +66,10 @@ class NMPC_CBF_MULTI_N:
         # initial state constraint
         solver["opt"].subject_to(solver["stateHorizon"][0,:] == solver["stateNow"])
         
-        obj = 0 # initalise objective cost
+        costFunction = 0 # initalise objective cost
         
-        # N horizon state constraints & cost function
         for i in range(N):            
+            # N horizon state constraints
             st = solver["stateHorizon"][i,:]                # current state
             ct = solver["ctrlHorizon"][i,:]                 # current controls
             k1 = solver["f"](st,ct).T                       # rk4 next state calculation
@@ -83,42 +78,49 @@ class NMPC_CBF_MULTI_N:
             k4 = solver["f"](st + self.dt*k3, ct).T         #
             stNext = st + self.dt/6*(k1 + 2*k2 + 2*k3 + k4) # next state
             solver["opt"].subject_to(solver["stateHorizon"][i+1,:] == stNext)
+            
+            # objective function across horizon
+            stateErr = st - solver["stateTgt"]
+            costFunction = costFunction + ca.mtimes([stateErr, self.wStates, stateErr.T]) + ca.mtimes([ct, self.wCtrls, ct.T])
+        solver["opt"].minimize(costFunction)
 
-        # cost function
+        # Relaxed CBF for obstacles
         for i in range(N):
-            stateErr = solver["stateHorizon"][i,:] - solver["x_ref"][i+1,:]
-            ctrlErr = solver["ctrlHorizon"][i,:] - solver["u_ref"][i,:]
-            obj = obj + ca.mtimes([stateErr, self.wStates, stateErr.T]) + ca.mtimes([ctrlErr, self.wCtrls, ctrlErr.T])
-        #state_error_N = solver["stateHorizon"][self.N,:] - solver["x_ref"][self.N+1,:]
-        #obj = obj + ca.mtimes([state_error_N, self.W_v, state_error_N.T])    
-        solver["opt"].minimize(obj)
-
-        # CBF for static obstacles
-        for i in range(self.N):
             for j in range(self.nObs):            
-                st = solver["stateHorizon"][i,:]
-                st_next = solver["stateHorizon"][i+1,:]
-                h = (st[0]-self.SO[j,0])**2+(st[1]-self.SO[j,1])**2-(self.vehRad+self.SO[j,2])**2
-                h_next = (st_next[0]-self.SO[j,0])**2+(st_next[1]-self.SO[j,1])**2-(self.vehRad+self.SO[j,2])**2
-                self.opt.subject_to(h_next-(1-self.cbf_gamma)*h >= 0) 
+                st = solver["stateHorizon"][i,0:2]          # current state xy position
+                st_next = solver["stateHorizon"][i+1,0:2]   # next state xy position
 
-        # constraint the change of velocity
-        for i in range(self.N-1):
-            dvel = (solver["ctrlHorizon"][i+1,:] - solver["ctrlHorizon"][i,:])/self.dt
-            self.opt.subject_to(self.opt.bounded(-self.max_dv, dvel[0], self.max_dv))
-            self.opt.subject_to(self.opt.bounded(-self.max_domega, dvel[1], self.max_domega))
+                # h      = (     st[0]-solver["obstacles"][j,0])**2 + (st[1]-solver["obstacles"][j,1])**2-(self.vehRad+solver["obstacles"][j,2])**2
+                # h_next = (st_next[0]-solver["obstacles"][j,0])**2 + (st_next[1]-self.SO[j,1])**2-(self.vehRad+self.SO[j,2])**2
+                
+                # relaxed cbf components
+                h      = ca.norm_2(st      - solver["obstacles"][j,0:2]) - (self.vehRad + solver["obstacles"][j,2])
+                h_next = ca.norm_2(st_next - solver["obstacles"][j,0:2]) - (self.vehRad + solver["obstacles"][j,2])
+                # relaxed cbf constraint for obstacle j at horizon step i
+                solver["opt"].subject_to( h_next - (1- solver["cbfParms"][j] )*h >= 0) 
+
+        # # constraint the change of velocity (removed)
+        # for i in range(self.N-1):
+        #     dvel = (solver["ctrlHorizon"][i+1,:] - solver["ctrlHorizon"][i,:])/self.dt
+        #     self.opt.subject_to(self.opt.bounded(-self.max_dv, dvel[0], self.max_dv))
+        #     self.opt.subject_to(self.opt.bounded(-self.max_domega, dvel[1], self.max_domega))
 
         # boundary of state and control input
-        self.opt.subject_to(self.opt.bounded(self.min_x, x, self.max_x))
-        self.opt.subject_to(self.opt.bounded(self.min_y, y, self.max_y))
-        self.opt.subject_to(self.opt.bounded(self.min_theta, theta, self.max_theta))    
-        self.opt.subject_to(self.opt.bounded(self.min_v, v, self.max_v))
-        self.opt.subject_to(self.opt.bounded(self.min_omega, omega, self.max_omega))
+        solver["opt"].subject_to(solver["opt"].bounded(self.min_x,     solver["stateHorizon"][:,0], self.max_x))
+        solver["opt"].subject_to(solver["opt"].bounded(self.min_y,     solver["stateHorizon"][:,1], self.max_y))
+        solver["opt"].subject_to(solver["opt"].bounded(self.min_theta, solver["stateHorizon"][:,2], self.max_theta))    
+        solver["opt"].subject_to(solver["opt"].bounded(self.min_v,     solver["ctrlHorizon"][:,0], self.max_v))
+        solver["opt"].subject_to(solver["opt"].bounded(self.min_omega, solver["ctrlHorizon"][:,1], self.max_omega))
         
-        # setup optimization parameters
-        opts_setting = {'ipopt.max_iter':200,'ipopt.print_level':0,'print_time':0,'ipopt.acceptable_tol':1e-8,'ipopt.acceptable_obj_change_tol':1e-6}
-        #max iter was 2000
-        self.opt.solver('ipopt', opts_setting)
+        # setup optimization parameters #max iter was 2000
+        opts_setting = {'ipopt.max_iter':200,
+                        'ipopt.print_level':0,
+                        'print_time':0,
+                        'ipopt.acceptable_tol':1e-8,
+                        'ipopt.acceptable_obj_change_tol':1e-6}
+        
+        solver["opt"].solver('ipopt', opts_setting)
+        self.solvers.append(solver)     # add this solver to the solver stack
     
     def solve(self, next_trajectories, next_controls):
         
@@ -148,3 +150,16 @@ class NMPC_CBF_MULTI_N:
         self.nObs = len(obstacle[:, 0])                                     # Set the number of obstacles (should always be 1 for this example)
         self.setup_controller()                                             # Setup the controller optimisation for the next episode
         return
+
+
+if __name__ == "__main__":
+    nmpc = NMPC_CBF_MULTI_N(0.1, 10, 3)
+    print("NMPC_CBF_MULTI_N class initialized successfully.")
+    # # Example usage
+    # state_now = np.array([0.0, 0.0, 0.0])
+    # state_tgt = np.array([1.0, 1.0, 0.0])
+    # obstacles = np.array([[2.0, 2.0, 0.5]])
+    # cbf_parms = np.array([[1.0]])
+    
+    # nmpc.setup_controller(10)
+    # nmpc.solve(state_now, state_tgt, obstacles, cbf_parms)
