@@ -86,11 +86,9 @@ class NMPC_CBF_MULTI_N:
         for i in range(N):
             st      = ca.repmat(solver["stateHorizon"][i  ,0:2],self.nObs,1)    # current state xy position
             st_next = ca.repmat(solver["stateHorizon"][i+1,0:2],self.nObs,1)    # next state xy position
-            # Compute h and h_next for ALL obstacles simultaneously
-            obs = solver["obstacles"][:, 0:2]
-            temp = (     st - obs)
-            h      = ca.sqrt( ca.sum1(temp**2) ) - (self.vehRad + solver["obstacles"][:, 2])
-            h_next = ca.sqrt( ca.sum1((st_next - solver["obstacles"][:, 0:2])**2) ) - (self.vehRad + solver["obstacles"][:, 2])
+            voRads = solver["obstacles"][:, 2] + self.vehRad
+            h      = ca.sqrt( ca.sum2((     st - solver["obstacles"][:, 0:2])**2) ) - voRads
+            h_next = ca.sqrt( ca.sum2((st_next - solver["obstacles"][:, 0:2])**2) ) - voRads
             # Apply constraints for all obstacles at horizon step i
             solver["opt"].subject_to(h_next - (1 - solver["cbfParms"]) * h >= 0)
 
