@@ -85,13 +85,19 @@ class NMPC_CBF_MULTI_N:
 
         # Relaxed CBF for obstacles
         for i in range(N):
-            st      = ca.repmat(solver["stateHorizon"][i  ,0:2],self.nObs,1)    # current state xy position
-            st_next = ca.repmat(solver["stateHorizon"][i+1,0:2],self.nObs,1)    # next state xy position
-            voRads = solver["obstacles"][:, 2] + self.vehRad
-            h      = ca.sqrt( ca.sum2((     st - solver["obstacles"][:, 0:2])**2) ) - voRads
-            h_next = ca.sqrt( ca.sum2((st_next - solver["obstacles"][:, 0:2])**2) ) - voRads
-            # Apply constraints for all obstacles at horizon step i
-            solver["opt"].subject_to(h_next - (1 - solver["cbfParms"]) * h >= 0)
+            # st      = ca.repmat(solver["stateHorizon"][i  ,0:2],self.nObs,1)    # current state xy position
+            # st_next = ca.repmat(solver["stateHorizon"][i+1,0:2],self.nObs,1)    # next state xy position
+            # voRads = solver["obstacles"][:, 2] + self.vehRad
+            # h      = ca.sqrt( ca.sum2((     st - solver["obstacles"][:, 0:2])**2) ) - voRads
+            # h_next = ca.sqrt( ca.sum2((st_next - solver["obstacles"][:, 0:2])**2) ) - voRads
+            # # Apply constraints for all obstacles at horizon step i
+            # solver["opt"].subject_to(h_next - (1 - solver["cbfParms"]) * h >= 0)
+            for j in range(self.nObs):            
+                st = solver["stateHorizon"][i,:]
+                st_next = solver["stateHorizon"][i+1,:]
+                h      = (st[0]     -solver["obstacles"][j,0])**2 + (     st[1]-solver["obstacles"][j,1])**2-(self.vehRad + solver["obstacles"][j,2])**2
+                h_next = (st_next[0]-solver["obstacles"][j,0])**2 + (st_next[1]-solver["obstacles"][j,1])**2-(self.vehRad + solver["obstacles"][j,2])**2
+                solver["opt"].subject_to(h_next-(1-solver["cbfParms"][j])*h >= 0)
 
 
         # boundary of state and control input
@@ -158,16 +164,23 @@ class NMPC_CBF_MULTI_N:
     #         self.stateHorizon = 
     #     else:
 
+from generateCurriculumEnvironment import generate_curriculum_environment as genenv
+np.set_printoptions(precision=2, suppress=True)
 
 if __name__ == "__main__":
+
+    env = genenv(2, gen_fig=False)
+    print(env)
+    exit()
+
     nmpc = NMPC_CBF_MULTI_N(0.1, [10, 20, 30, 40, 50], 3)
     print("NMPC_CBF_MULTI_N class initialized successfully.")
     nmpc.solversIdx = 0
     nmpc.currentN = nmpc.nVals[nmpc.solversIdx]
-    obstacles = np.array([[20,19.9,1],[220,20,1],[330,30,1]])
-    targetPos = np.array([50,50,0.7])
+    obstacles = np.array([[10,9.5,1],[8.0 , 13.0,1],[330,30,1]])
+    targetPos = np.array([19,19,0.7])
     currentPos = np.array([0,0,0.7])
-    cbf = np.array([ 0.999, 0.1 ,0.1])
+    cbf = np.array([ 0.3  , 0.7 ,0.1])
 
     # obstacles = obstacles[-1,:]
     # cbf = cbf[-1]
@@ -175,17 +188,18 @@ if __name__ == "__main__":
     import time
     from matplotlib import pyplot as plt
 
-    simRealTime = 30
+    simRealTime = 15
     simSteps = int(simRealTime / 0.1)
     simdata = np.zeros(( simSteps + 1, 5))
     # input(f"Simulate {simRealTime} seconds, {simSteps} steps")
+    simdata[0,2:] = currentPos
     for i in range(simSteps):
         t = time.time()
-        simdata[i,2:] = currentPos
         u = nmpc.solve(targetPos,currentPos,obstacles,cbf)
         currentPos = nmpc.stateHorizon[1,:]
         simdata[i,0] = i
         simdata[i,1] = time.time() - t
+        simdata[i+1,2:] = currentPos
         print(f"{i} : {u}")
     
     # print(simdata)
@@ -195,6 +209,8 @@ if __name__ == "__main__":
     ax.plot(x, y)      # Plots y versus x as a line
 
     circle = plt.Circle((obstacles[0,0:2]), radius=1, color='red', fill=False)  # fill=False for outline only
+    ax.add_artist(circle)
+    circle = plt.Circle((obstacles[1,0:2]), radius=1, color='red', fill=False)  # fill=False for outline only
     ax.add_artist(circle)
 
     plt.xlabel('x')
