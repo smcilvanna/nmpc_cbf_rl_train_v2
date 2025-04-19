@@ -10,9 +10,9 @@ class NMPC_CBF_MULTI_N:
         self.dt = dt                                    # time step
         self.nVals = nVals                              # horizon length values for solvers
         self.nObs = nObs                                # number of obstacles
-        self.wStates = np.diag([5.0, 5.0, 0.5])         # Weight matrix for states
-        self.wCtrls = np.diag([5.0, 0.1])               # Weight matrix for controls
-        self.wTerm = 10**4*np.diag([1.0, 1.0, 0.001])   # Weight matrix for Terminal state
+        self.wStates = np.diag([5.0, 5.0, 0.1])         # Weight matrix for states
+        self.wCtrls = np.diag([5.0, 1.0])               # Weight matrix for controls
+        self.wTerm = 1e5*np.diag([1.0, 1.0, 0.001])   # Weight matrix for Terminal state
         self.min_x = -100.0                             # State bounds
         self.max_x =  100.0                             
         self.min_y = -100.0                             
@@ -29,8 +29,9 @@ class NMPC_CBF_MULTI_N:
         self.solvers = []                               # Init empty solver stack for variable N solvers
         self.setup_controllers()                        # Create solvers from nRange list input arg
         self.solversIdx = 0                             # Set the index of the active solver
-        self.stateHorizon = []                          # Init empty array for state horizon
-        self.ctrlHorizon = []                           # Init empty array for control horizon
+        self.currentN = nVals[0]                        # Set the N horizon length of active solver
+        self.stateHorizon = np.array([])                # Init empty array for state horizon
+        self.ctrlHorizon = np.array([])                 # Init empty array for control horizon
     
     def setup_controllers(self):
         for N in self.nVals:
@@ -43,16 +44,16 @@ class NMPC_CBF_MULTI_N:
             "N"   : N
         }
         solver["stateHorizon"] = solver["opt"].variable(N+1, 3)     # x:[:,0] | y:[:,1] | theta:[:,3]
-        solver["ctrlHorizon"] = solver["opt"].variable(N, 2)        # v:[:,0] | omega:[:,1]
+        solver["ctrlHorizon"]  = solver["opt"].variable(N, 2)        # v:[:,0] | omega:[:,1]
 
         # kinematic model definition f
         solver["f"] = lambda x_, u_: ca.vertcat(*[ca.cos(x_[2])*u_[0], ca.sin(x_[2])*u_[0], u_[1]])
-        # Define the ODE function
-        x = ca.MX.sym('x', 3)
-        u = ca.MX.sym('u', 2)
-        ode = solver["f"](x, u)
-        dae = {'x': x, 'p': u, 'ode': ode}  #       t0   dt         opts
-        integrator = ca.integrator('F', 'cvodes', dae, 0, self.dt)
+        # # Define the ODE function
+        # x = ca.MX.sym('x', 3)
+        # u = ca.MX.sym('u', 2)
+        # ode = solver["f"](x, u)
+        # dae = {'x': x, 'p': u, 'ode': ode}  #       t0   dt         opts
+        # integrator = ca.integrator('F', 'cvodes', dae, 0, self.dt)
 
         # parameters to be passsed at solve time
         solver["stateNow"]  = solver["opt"].parameter(1, 3)
@@ -69,13 +70,13 @@ class NMPC_CBF_MULTI_N:
             # N horizon state constraints
             st = solver["stateHorizon"][i,:]                    # current state
             ct = solver["ctrlHorizon"][i,:]                     # current controls
-            # k1 = solver["f"](st,ct).T                       # rk4 next state calculation
-            # k2 = solver["f"](st + self.dt/2*k1, ct).T       #
-            # k3 = solver["f"](st + self.dt/2*k2, ct).T       #
-            # k4 = solver["f"](st + self.dt*k3, ct).T         #
-            # stNext = st + self.dt/6*(k1 + 2*k2 + 2*k3 + k4) # next state
-            stNext = integrator(x0=st, p=ct)["xf"]  # Next state i+1
-            solver["opt"].subject_to(solver["stateHorizon"][i+1, :] == stNext.T)  # append state constraint for horizon step i+1
+            k1 = solver["f"](st,ct).T                       # rk4 next state calculation
+            k2 = solver["f"](st + self.dt/2*k1, ct).T       #
+            k3 = solver["f"](st + self.dt/2*k2, ct).T       #
+            k4 = solver["f"](st + self.dt*k3, ct).T         #
+            stNext = st + self.dt/6*(k1 + 2*k2 + 2*k3 + k4) # next state
+            # stNext = integrator(x0=st, p=ct)["xf"]  # Next state i+1
+            solver["opt"].subject_to(solver["stateHorizon"][i+1, :] == stNext)  # append state constraint for horizon step i+1
             
             # objective function across horizon
             stateErr = st - solver["stateTgt"]
@@ -101,7 +102,7 @@ class NMPC_CBF_MULTI_N:
         solver["opt"].subject_to(solver["opt"].bounded(self.min_omega, solver["ctrlHorizon"][:,1], self.max_omega))
         
         # setup optimization parameters #max iter was 2000
-        opts_setting = {'ipopt.max_iter':200,
+        opts_setting = {'ipopt.max_iter':500,
                         'ipopt.print_level':0,
                         'print_time':0,
                         'ipopt.acceptable_tol':1e-8,
@@ -122,10 +123,9 @@ class NMPC_CBF_MULTI_N:
 
     def solve(self, targetPos, currentPos, obstacles, cbfParms):
         # On first step init state and control horizon arrays
-        if not self.ctrlHorizon and not self.stateHorizon:
-            N = self.nVals[self.solversIdx]
-            self.stateHorizon = np.zeros((N+1,3))
-            self.ctrlHorizon = np.zeros((N,2))
+        if self.ctrlHorizon.size == 0 and self.stateHorizon.size == 0:
+            self.stateHorizon = np.zeros((self.currentN+1, 3))
+            self.ctrlHorizon  = np.zeros((self.currentN,   2))
         # select the solver
         solver = self.solvers[self.solversIdx]
         # set the parameters
@@ -134,7 +134,7 @@ class NMPC_CBF_MULTI_N:
         solver["opt"].set_value(solver["obstacles"], obstacles )
         solver["opt"].set_value(solver["cbfParms"],  cbfParms  )
         # set the optimisation variables
-        solver["opt"].set_initial(solver["stateHorizon"], self.stateHorizon)  # provide the initial guess of state for the next step
+        solver["opt"].set_initial(solver["stateHorizon"], self.stateHorizon)    # provide the initial guess of state for the next step
         solver["opt"].set_initial(solver["ctrlHorizon"], self.ctrlHorizon)            # provide the initial guess of control for the next step       
         ## solve the problem
         sol = solver["opt"].solve()
@@ -143,22 +143,65 @@ class NMPC_CBF_MULTI_N:
         newCtrlHorizon = sol.value(solver["ctrlHorizon"])
         self.ctrlHorizon[:-1, :] = newCtrlHorizon[1:, :]
         self.ctrlHorizon[-1, :] = newCtrlHorizon[-1, :]
-        self.stateHorizon = sol.value(solver["stateHorizon"])
+        solStateHorizon = sol.value(solver["stateHorizon"])
+        self.stateHorizon = np.vstack([solStateHorizon[1:], solStateHorizon[-1:]])
         return newCtrlHorizon[0,:]
 
     def reset_nmpc(self):           # Reset the NMPC for the next episode
         self.ctrlHorizon = []           # empty horizon arrays
         self.stateHorizon = []
         return
+    
+    # def adjustHorizon(self,newN):
+    #     if newN <= self.currentN:
+    #         self.ctrlHorizon  = self.ctrlHorizon[]
+    #         self.stateHorizon = 
+    #     else:
 
 
 if __name__ == "__main__":
     nmpc = NMPC_CBF_MULTI_N(0.1, [10, 20, 30, 40, 50], 3)
     print("NMPC_CBF_MULTI_N class initialized successfully.")
-    
-    obstacles = np.array([[11,10,1],[22,20,1],[33,30,1]])
+    nmpc.solversIdx = 0
+    nmpc.currentN = nmpc.nVals[nmpc.solversIdx]
+    obstacles = np.array([[20,19.9,1],[220,20,1],[330,30,1]])
     targetPos = np.array([50,50,0.7])
     currentPos = np.array([0,0,0.7])
-    cbf = np.array([ 0.1, 0.2 ,0.1])
-    u = nmpc.solve(targetPos,currentPos,obstacles,cbf)
+    cbf = np.array([ 0.999, 0.1 ,0.1])
+
+    # obstacles = obstacles[-1,:]
+    # cbf = cbf[-1]
+
+    import time
+    from matplotlib import pyplot as plt
+
+    simRealTime = 30
+    simSteps = int(simRealTime / 0.1)
+    simdata = np.zeros(( simSteps + 1, 5))
+    # input(f"Simulate {simRealTime} seconds, {simSteps} steps")
+    for i in range(simSteps):
+        t = time.time()
+        simdata[i,2:] = currentPos
+        u = nmpc.solve(targetPos,currentPos,obstacles,cbf)
+        currentPos = nmpc.stateHorizon[1,:]
+        simdata[i,0] = i
+        simdata[i,1] = time.time() - t
+        print(f"{i} : {u}")
+    
+    # print(simdata)
+    fig, ax = plt.subplots()
+    x = simdata[:,2]
+    y = simdata[:,3]
+    ax.plot(x, y)      # Plots y versus x as a line
+
+    circle = plt.Circle((obstacles[0,0:2]), radius=1, color='red', fill=False)  # fill=False for outline only
+    ax.add_artist(circle)
+
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.title('y vs x')
+    plt.show()
+
+    # u = nmpc.solve(targetPos,currentPos,obstacles,cbf)
     print(u)
+    print(nmpc.stateHorizon[-1,:])
