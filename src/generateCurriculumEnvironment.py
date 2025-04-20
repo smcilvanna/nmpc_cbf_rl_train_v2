@@ -16,7 +16,7 @@ def generate_curriculum_environment(curriculum_level: int, gen_fig: bool = False
         2: {'num_obs': 3, 'grid_size': 15, 'min_gap': 3.0},
         3: {'num_obs': 4, 'grid_size': 20, 'min_gap': 2.5},
         4: {'num_obs': 5, 'grid_size': 25, 'min_gap': 1.5},
-        5: {'num_obs': 6, 'grid_size': 30, 'min_gap': 1.0}
+        5: {'num_obs': 6, 'grid_size': 30, 'min_gap': 1.5}
     }
     params = presets[curriculum_level]
     
