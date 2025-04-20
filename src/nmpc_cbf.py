@@ -95,9 +95,21 @@ class NMPC_CBF_MULTI_N:
             for j in range(self.nObs):            
                 st = solver["stateHorizon"][i,:]
                 st_next = solver["stateHorizon"][i+1,:]
-                h      = (st[0]     -solver["obstacles"][j,0])**2 + (     st[1]-solver["obstacles"][j,1])**2-(self.vehRad + solver["obstacles"][j,2])**2
-                h_next = (st_next[0]-solver["obstacles"][j,0])**2 + (st_next[1]-solver["obstacles"][j,1])**2-(self.vehRad + solver["obstacles"][j,2])**2
-                solver["opt"].subject_to(h_next-(1-solver["cbfParms"][j])*h >= 0)
+                # relax cbf
+                # h      = (st[0]     -solver["obstacles"][j,0])**2 + (     st[1]-solver["obstacles"][j,1])**2-(self.vehRad + solver["obstacles"][j,2])**2
+                # h_next = (st_next[0]-solver["obstacles"][j,0])**2 + (st_next[1]-solver["obstacles"][j,1])**2-(self.vehRad + solver["obstacles"][j,2])**2
+                # solver["opt"].subject_to(h_next-(1-solver["cbfParms"][j])*h >= 0) # relaxed cbf
+                
+                # ecbf
+                #  for circular obstacle a = (obs_rad+veh_rad)^-2
+                #  safety function h : a(x_veh - x_obs)^2 + a(y_veh - y_obs)^2 -1 >= 0
+                #               lfh  : 2a(x_veh  -x_obs)X_dot + 2a(y_veh - y_obs)
+                #       ecbf : lfh + k*h >=0
+                obs =solver["obstacles"][j,:] 
+                a = (obs[2] + self.vehRad)**-2
+                h = a*(st[0]-obs[0])**2 + a*(st[1]-obs[1])**2 + 1
+                lfh = 2*a*(st[0]-obs[0])*( (st_next[0]-st[0]/self.dt)) + 2*a*(st[1]-obs[1])*( (st_next[1]-st[1]/self.dt))
+                solver["opt"].subject_to( lfh + solver["cbfParms"][j]*h >= 0)
 
 
         # boundary of state and control input
