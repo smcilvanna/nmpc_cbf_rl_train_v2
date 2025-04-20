@@ -94,7 +94,17 @@ def generate_curriculum_environment(curriculum_level: int, gen_fig: bool = False
             if not valid:
                 raise RuntimeError("Failed to place extra obstacle")
 
+    # Need to pass 6 obstacles, pad any missing with far away obstacles
+    while obstacles.shape[0] < 6:
+        dist = 150                                      # put a dummy obstacle far away
+        angle = np.deg2rad(np.random.randint(0,90))     # randomise angle to obstacle and pos
+        false_obs = np.round(np.array([np.cos(angle)*dist , np.sin(angle)*dist, (np.random.randint(1,101))/10]),1)
+        obstacles = np.vstack([obstacles, false_obs])     # add to stack
+
+
     # ===== Final Environment Setup =====
+    target_yaw = np.arctan2(target_pos[1],target_pos[0])
+    target_pos = np.append(target_pos, target_yaw)
     out = {
         'target_pos': target_pos,
         'obstacles': obstacles,
@@ -138,7 +148,7 @@ def _generate_valid_target(grid_size: float) -> np.ndarray:
 
 if __name__ == "__main__":
     # Test all curriculum levels
-    for level in range(1, 6):
+    for level in range(1, 2):
         try:
             env = generate_curriculum_environment(level, gen_fig=True)
             plt.title(f"Curriculum Level {level}")
