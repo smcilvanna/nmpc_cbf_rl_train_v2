@@ -1,44 +1,28 @@
 
 import numpy as np
 from generateCurriculumEnvironment import generate_curriculum_environment as genenv
+from generateCurriculumEnvironment import genCurEnv_2 as genenv2
+from generateCurriculumEnvironment import MapLimits
 import time
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
 from nmpc_cbf import NMPC_CBF_MULTI_N
+from matplotlib.animation import FuncAnimation
+import tkinter as tk
+from tkinter import filedialog
+import pickle
 
 np.set_printoptions(precision=3, suppress=True)
 
-def plotSimdata(simdata,target):
+
+def plotSimdataAnimated(simdata, target, obstacles):
     fig = plt.figure(figsize=(10, 6))
     
-    ax1 = plt.subplot2grid((2, 6), (0, 0), rowspan=2, colspan=2)    # ax1: left, spanning 2 rows and 2 columns  
-    ax2 = plt.subplot2grid((2, 6), (0, 2), rowspan=1, colspan=2)    # ax2: 1 row, 2 columns top row right of ax1
-    ax3 = plt.subplot2grid((2, 6), (1, 2), rowspan=1, colspan=2)    # ax3: 1 row, 2 columns bottom row right of ax1
-    ax4 = plt.subplot2grid((2, 6), (0, 4), rowspan=1, colspan=2)    # ax4: 1 row, 2 columns right of ax2
-    ax5 = plt.subplot2grid((2, 6), (1, 4), rowspan=1, colspan=2)    # ax4: 1 row, 2 columns right of ax3
-
-    # Position Plot
-    t = simdata[:,0]
-    mpct = simdata[:,1]*1000
-    x = simdata[:,2]
-    y = simdata[:,3]
-    th = simdata[:,4]
-    v = simdata[:,5]
-    w = simdata[:,6]
-    s = simdata[:,7] 
-    s[0] = s[1]
-
-    ax1.scatter(x, y,s=1)      # Plots y versus x as a line
-    ax1.add_patch(Circle(simdata[-1,2:5], 0.55, color='black', alpha=0.9, label="vehicle"))
-    ax1.add_patch(Circle(target[0:2], 0.2, color='green', alpha=0.9))
-    for i in range(obstacles.shape[0]):
-        ax1.add_patch(Circle( obstacles[i,0:2], obstacles[i,2], color='red')) 
-
-    ax2.plot(t,mpct, label="mpc_time")
-    ax3.plot(t,s, label="min sep")
-    ax3.hlines(0,t[0],t[-1], colors='red')
-    ax4.plot(t,v, label="Linear (m/s)")
-    ax5.plot(t,w, label="Angular (rad/s)")
+    ax1 = plt.subplot2grid((2, 6), (0, 0), rowspan=2, colspan=2)
+    ax2 = plt.subplot2grid((2, 6), (0, 2), rowspan=1, colspan=2)
+    ax3 = plt.subplot2grid((2, 6), (1, 2), rowspan=1, colspan=2)
+    ax4 = plt.subplot2grid((2, 6), (0, 4), rowspan=1, colspan=2)
+    ax5 = plt.subplot2grid((2, 6), (1, 4), rowspan=1, colspan=2)
 
     # Set axis limits for ax1
     lim = np.max(target[0:2])
@@ -53,18 +37,133 @@ def plotSimdata(simdata,target):
     ax3.set_xlabel('Simulation Step')
     ax3.set_ylabel('Min Obs Separation (m)')
     ax4.set_xlabel('Simulation Step')
-    ax4.set_ylabel('v (m/s)')
+    ax4.set_ylabel('Velocity Controls')
     ax5.set_xlabel('Simulation Step')
-    ax5.set_ylabel(r'$\omega$ (rad/s)')
+    ax5.set_ylabel('Solver Horizon')
+
+    # Initialize plots with empty data that will be filled during animation
+    scatter = ax1.scatter([], [], s=10, color='blue')
+    vehicle_circle = Circle((0, 0), 0.55, color='black', alpha=0.9)
+    ax1.add_patch(vehicle_circle)
+    target_circle = Circle(target[0:2], 0.2, color='green', alpha=0.9)
+    ax1.add_patch(target_circle)
+    
+    # Add obstacles
+    for obs in obstacles:
+        circle = Circle(obs[0:2], obs[2], color='red')
+        ax1.add_patch(circle)
+
+    # Initialize empty line plots
+    line_mpct, = ax2.plot([], [], label='mpc_time')
+    line_s, = ax3.plot([], [], label='min sep')
+    hlines = ax3.hlines(0, simdata[0,0], simdata[-1,0], colors='red')
+    line_v, = ax4.plot([], [], label='Linear (m/s)')
+    line_w, = ax4.plot([], [], label='Angular (rad/s)')
+    line_n, = ax5.plot([], [], label='Solver Horizon')
+
+    # Set the axis limits based on the full data range
+    ax2.set_xlim(simdata[0,0], simdata[-1,0])
+    ax3.set_xlim(simdata[0,0], simdata[-1,0])
+    ax4.set_xlim(simdata[0,0], simdata[-1,0])
+    ax4.set_xlim(simdata[0,0], simdata[-1,0])
+    ax5.set_xlim(simdata[0,0], simdata[-1,0])
+
+    ax2.set_ylim(0, np.max(simdata[:,1]*1000)*1.1)
+    ax3.set_ylim(0, np.max(simdata[:,7])*1.1)
+    ax4.set_ylim(np.min([simdata[:,5],simdata[:,6]])*1.1, np.max([simdata[:,5],simdata[:,6]])*1.1)
+    ax5.set_ylim(np.min(simdata[:,8])*1.1, np.max(simdata[:,8])*1.1)
+
+    # Add legends
+    ax2.legend()
+    ax3.legend()
+    ax4.legend()
+    ax4.legend()
+
+    # Define the update function for animation
+    def update(frame):
+        # Update scatter trail showing vehicle path
+        scatter.set_offsets(np.c_[simdata[:frame,2], simdata[:frame,3]])
+        # Update vehicle position
+        vehicle_circle.center = (simdata[frame,2], simdata[frame,3])
+
+        # Update time series plots
+        line_mpct.set_data(simdata[:frame,0], simdata[:frame,1]*1000)
+        line_s.set_data(simdata[:frame,0], simdata[:frame,7])
+        line_v.set_data(simdata[:frame,0], simdata[:frame,5])
+        line_w.set_data(simdata[:frame,0], simdata[:frame,6])
+        line_n.set_data(simdata[:frame,0], simdata[:frame,8])
+
+        return scatter, vehicle_circle, line_mpct, line_s, line_v, line_w, line_n
+
+    # Create animation
+    ani = FuncAnimation(fig, update, frames=len(simdata), interval=100, blit=True)
+
+    plt.tight_layout()
+    plt.show()
+    
+    return ani  # Return animation object to prevent garbage collection
+
+
+def plotSimdata(simdata,target):
+    fig = plt.figure(figsize=(10, 6))
+    
+    ax1 = plt.subplot2grid((2, 6), (0, 0), rowspan=2, colspan=2)    # ax1: left, spanning 2 rows and 2 columns  
+    ax2 = plt.subplot2grid((2, 6), (0, 2), rowspan=1, colspan=2)    # ax2: 1 row, 2 columns top row right of ax1
+    ax3 = plt.subplot2grid((2, 6), (1, 2), rowspan=1, colspan=2)    # ax3: 1 row, 2 columns bottom row right of ax1
+    ax4 = plt.subplot2grid((2, 6), (0, 4), rowspan=1, colspan=2)    # ax4: 1 row, 2 columns right of ax2
+    ax5 = plt.subplot2grid((2, 6), (1, 4), rowspan=1, colspan=2)    # ax4: 1 row, 2 columns right of ax3
+
+    ax1.axis('square')
+
+    # Position Plot
+    t = simdata[:,0]
+    mpct = simdata[:,1]*1000
+    x = simdata[:,2]
+    y = simdata[:,3]
+    th = simdata[:,4]
+    v = simdata[:,5]
+    w = simdata[:,6]
+    s = simdata[:,7] 
+    s[0] = s[1]
+    n = simdata[:,8]
+
+    ax1.scatter(x, y,s=1)      # Plots y versus x as a line
+    ax1.add_patch(Circle(simdata[-1,2:5], 0.55, color='black', alpha=0.9, label="vehicle"))
+    ax1.add_patch(Circle(target[0:2], 0.2, color='green', alpha=0.9))
+    for i in range(obstacles.shape[0]):
+        ax1.add_patch(Circle( obstacles[i,0:2], obstacles[i,2], color='red')) 
+
+    ax2.plot(t,mpct, label="mpc_time")
+    ax3.plot(t,s, label="min sep")
+    ax3.hlines(0,t[0],t[-1], colors='red')
+    ax4.plot(t,v, label="v (m/s)")
+    ax4.plot(t,w, label=r'$\omega$ (rad/s)')
+    ax5.plot(t,n, label="NMPC-N")
+
+    # Set axis limits for ax1
+    lim = np.max(target[0:2])
+    ax1.set_xlim(0, lim)
+    ax1.set_ylim(0, lim)
+
+    # Set axis labels
+    ax1.set_xlabel('X position')
+    ax1.set_ylabel('Y position')
+    ax2.set_xlabel('Simulation Step')
+    ax2.set_ylabel('Solve Time (ms)')
+    ax3.set_xlabel('Simulation Step')
+    ax3.set_ylabel('Min Obs Separation (m)')
+    ax4.set_xlabel('Simulation Step')
+    ax4.set_ylabel('Velocity Controls')
+    ax5.set_xlabel('Simulation Step')
+    ax5.set_ylabel('Solver Horizon')
 
     plt.tight_layout()
     plt.show()
 
 def simulateStep(stepTime, startState, obstacles ,cbf ):
     simSteps = int(stepTime / 0.1)          # hardcoded timestep dt = 0.1
-    # print(simSteps)
-    simdata = np.zeros(( simSteps + 1, 8))  # [stepIndex solveTime x y yaw v w]
-    simdata[0,2:5] = startState
+    simdata = np.zeros(( simSteps + 1, 10))     # [stepIndex solveTime x y yaw v w sep N  _ ]
+    simdata[0,2:5] = startState                 #   0           1      2 3  4  5 6  7  8  9
     currentPos = startState
     for i in range(1,simSteps+1):
         t = time.time()
@@ -74,7 +173,6 @@ def simulateStep(stepTime, startState, obstacles ,cbf ):
         simdata[i,1] = time.time() - t
         simdata[i,2:5] = currentPos
         simdata[i,5:7] = u
-        # print(f"{i} : {u}")
         collision = False
         sep = 1000.0
         for obs in obstacles:
@@ -83,6 +181,7 @@ def simulateStep(stepTime, startState, obstacles ,cbf ):
             if s < sep:
                 sep = s
         simdata[i,7] = sep
+        simdata[i,8] = nmpc.currentN
         if collision:
             print("CRASH!")
             break
@@ -96,31 +195,32 @@ def checkCollision(vehiclePos, obstacle):
 
 if __name__ == "__main__":
     print("[START]")
-    env = genenv(3, gen_fig=False)
-    # plt.show()
-    # print(env["obstacles"])
-    # print(env)
-    # exit()
+    random_env = True
+    if random_env:
+        # env = genenv(2, gen_fig=True)
+        # plt.show()
+        # input("[ENTER] to begin")
+        env = genenv2()
+    else:
+        file_path = './env2-1.pkl'
+        with open(file_path, 'rb') as f:
+            env = pickle.load(f)
 
-    nmpc = NMPC_CBF_MULTI_N(0.1, [10, 20, 30, 40, 50], 20)
+    Nvalues = [20 , 20] #np.arange(10,110,10)#[10, 20, 30, 40, 50]
+    nmpc = NMPC_CBF_MULTI_N(0.1, Nvalues, 20)
     print("NMPC_CBF_MULTI_N class initialized successfully.")
-    nmpc.solversIdx = 2
+    nmpc.solversIdx = np.random.randint(0,len(Nvalues)) # random start solver
     nmpc.currentN = nmpc.nVals[nmpc.solversIdx]
     obstacles = env['obstacles']
+    # obstacles[:,1] -= 2.0
     targetPos = env['target_pos']
-    # print(targetPos)
-    # print(np.rad2deg(targetPos[2]))
-
     startPos = np.array([0,0,targetPos[2]])
-    # cbf = np.array([ 1,1,1,1,1,1])*1
-
-    epStepTime = 5
+    epStepTime = 2
     epMaxTime = 15
-    # epMaxSteps = epMaxTime / nmpc.dt
-    # epdata = np.zeros(( epMaxSteps + 1, 8))
     runtime = 0
-    while runtime < epMaxTime:    
-        cbf = np.random.randint(1, 101, size=(1, 20))
+    targetArea = np.append(targetPos,0.05)
+    while runtime < epMaxTime:
+        cbf = np.tile(10,nmpc.nObs)#np.random.randint(1, 1000, size=(1, 20))/100 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< CBF VALUES
         simdata = simulateStep(epStepTime,startPos,obstacles, cbf)
         startPos = simdata[-1,2:5]
         runtime += epStepTime
@@ -128,15 +228,18 @@ if __name__ == "__main__":
             epdata = simdata
         else:
             epdata = np.vstack([epdata,simdata[1:,:]])
-        print(">> ",end=None)
+        print(">>")
+        fin, _ = checkCollision(startPos,targetArea)
+        if fin:
+            print("At Target")
+            break
+        else:
+            nmpc.adjustHorizon(np.random.randint(0,len(Nvalues)) ) 
 
-    print(epdata)
-    print(epdata.shape)
-    for i in range(301):
-        epdata[i,0]=i
+    epdata[:,0] = np.arange(epdata.shape[0])
 
-    plotSimdata(epdata,targetPos)
-
+    # plotSimdata(epdata,targetPos)
+    ani = plotSimdataAnimated(epdata, targetPos, obstacles)
     # startPos = simdata[-1,2:5]
     # simdata = simulateStep(10,startPos,obstacles)
     # plotSimdata(simdata,targetPos)

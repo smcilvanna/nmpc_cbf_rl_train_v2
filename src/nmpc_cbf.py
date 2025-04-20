@@ -170,11 +170,17 @@ class NMPC_CBF_MULTI_N:
         self.stateHorizon = []
         return
     
-    # def adjustHorizon(self,newN):
-    #     if newN <= self.currentN:
-    #         self.ctrlHorizon  = self.ctrlHorizon[]
-    #         self.stateHorizon = 
-    #     else:
-
+    def adjustHorizon(self,newIdx):
+        newN = self.nVals[newIdx]
+        if newN < self.currentN:
+            self.ctrlHorizon  = self.ctrlHorizon[0:newN  ,:]
+            self.stateHorizon = self.stateHorizon[0:newN+1,:]
+        else:
+            addCtrl  = np.tile( self.ctrlHorizon[-1,:], (newN-self.currentN,1))
+            addState = np.tile(self.stateHorizon[-1,:], (newN-self.currentN,1))
+            self.ctrlHorizon  = np.vstack([self.ctrlHorizon, addCtrl])
+            self.stateHorizon = np.vstack([self.stateHorizon, addState])
+        self.currentN = newN
+        self.solversIdx = newIdx
 if __name__ =="__main__":
     print("NMPC-CBF Solver Class Definition")
