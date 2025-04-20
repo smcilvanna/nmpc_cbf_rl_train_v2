@@ -16,3 +16,4 @@ src/__pycache__/
 *.swp
 *.log
 *temp*
+*.pkl
