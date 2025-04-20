@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from dataclasses import dataclass
+import pickle
 
 @dataclass
 class MapLimits:
@@ -10,6 +11,7 @@ class MapLimits:
 
 def generate_curriculum_environment(curriculum_level: int, gen_fig: bool = False) -> dict:
     """Generate curriculum-based environment with precise obstacle gap control."""
+    
     # ===== Curriculum Presets =====
     presets = {
         1: {'num_obs': 0, 'grid_size': 10, 'min_gap': 0},
@@ -21,7 +23,6 @@ def generate_curriculum_environment(curriculum_level: int, gen_fig: bool = False
     params = presets[curriculum_level]
     
     # Initialize parameters
-    veh_rad = 0.5
     clearance = 1.0  # Safety zone radius
     target_pos = _generate_valid_target(params['grid_size'])
     obstacles = np.empty((0, 3))
@@ -146,13 +147,118 @@ def _generate_valid_target(grid_size: float) -> np.ndarray:
         np.random.uniform(min_coord, grid_size)
     ])
 
+
+#########################################################################################################################
+#########################################################################################################################
+#########################################################################################################################
+
+def setGate(start_pos,dist,rad,gap,offset):
+    r = [rad , rad]
+    gate1 = place_obstacles(start_pos, radii=r, dist_to_gap= dist, offset_perp=-offset, gap_size=gap )
+    gate2 = place_obstacles(start_pos, radii=r, dist_to_gap= dist, offset_perp=-offset, gap_size=(gap + 4*rad + 0.4))
+    gate3 = place_obstacles(start_pos, radii=r, dist_to_gap= dist, offset_perp=-offset, gap_size=(gap + 8*rad + 0.4))
+    return np.vstack([gate1,gate2,gate3])
+
+def genCurEnv_2():
+    target_pos = _generate_valid_target(30)
+    target_yaw = np.arctan2(target_pos[1],target_pos[0])
+    target_pos = np.append(target_pos, target_yaw)
+    start_pos = np.array([0.0, 0.0, target_yaw])
+    
+    obstacles = setGate(start_pos,dist=10.0,rad=3.0,gap=3.0,offset=5.0)
+    while obstacles.shape[0] < 20:
+        dist = 150                                      # put a dummy obstacle far away
+        angle = np.deg2rad(np.random.randint(0,90))     # randomise angle to obstacle and pos
+        false_obs = np.round(np.array([np.cos(angle)*dist , np.sin(angle)*dist, (np.random.randint(1,101))/10]),1)
+        obstacles = np.vstack([obstacles, false_obs])     # add to stack
+    
+    fig, ax = plt.subplots()
+    ax.plot(0, 0, 'bo', markersize=8, label='Start')
+    ax.plot(target_pos[0], target_pos[1], 'gx', markersize=10, label='Target')
+    
+    # Draw safety zones
+    ax.add_patch(Circle((0, 0), 1.0, color='blue', alpha=0.1))
+    ax.add_patch(Circle(target_pos, 0.5, color='green', alpha=0.1))
+    
+    # Draw obstacles
+    for obs in obstacles:
+        ax.add_patch(Circle(obs[:2], obs[2], fill=False, color='red'))
+    
+    ax.set_xlim((-10,20))
+    ax.set_ylim((-10,20))
+    ax.set_aspect('equal')
+    # ax.legend()
+    plt.show()
+    
+    
+    out = {
+    'target_pos': target_pos,
+    'obstacles': obstacles,
+    }
+    # Need to pass 6 obstacles, pad any missing with far away obstacles
+
+    return out
+
+
+def place_obstacles(start_pose, radii, dist_to_gap, offset_perp, gap_size):
+    """
+    Places two circular obstacles forming a gate relative to a starting pose.
+    
+    Parameters:
+    start_pose (list): [x, y, theta] initial position and orientation (radians)
+    radii (list): [radius1, radius2] sizes of the two obstacles
+    dist_to_gap (float): Distance from start pose to gap center along theta
+    offset_perp (float): Perpendicular offset from theta axis to gap center
+    gap_size (float): Clear space between obstacle edges
+    
+    Returns:
+    np.array: 2x3 array of [x, y, radius] for each obstacle
+    """
+    x0, y0, theta = start_pose
+    r1, r2 = radii
+    
+    # Calculate gap center position
+    gap_center = np.array([
+        x0 + dist_to_gap * np.cos(theta),
+        y0 + dist_to_gap * np.sin(theta)
+    ])
+    
+    # Calculate perpendicular direction vector
+    perp_dir = np.array([-np.sin(theta), np.cos(theta)])
+    
+    # Apply perpendicular offset
+    gap_center += offset_perp * perp_dir
+    
+    # Calculate obstacle separation (center-to-center distance)
+    center_to_center = r1 + r2 + gap_size
+    
+    # Place obstacles symmetrically about gap center
+    obs1_pos = gap_center - (center_to_center/2) * perp_dir
+    obs2_pos = gap_center + (center_to_center/2) * perp_dir
+    
+    return np.array([
+        [obs1_pos[0], obs1_pos[1], r1],
+        [obs2_pos[0], obs2_pos[1], r2]
+    ])
+
+
 if __name__ == "__main__":
     # Test all curriculum levels
-    for level in range(1, 2):
-        try:
-            env = generate_curriculum_environment(level, gen_fig=True)
-            plt.title(f"Curriculum Level {level}")
-            plt.show()
-            print(f"Level {level} obstacles:\n{env['obstacles']}")
-        except Exception as e:
-            print(f"Error generating level {level}: {str(e)}")
+    # for level in range(5, 6):
+    #     try:
+    #         env = generate_curriculum_environment(level, gen_fig=True)
+    #         plt.title(f"Curriculum Level {level}")
+    #         plt.show()
+    #         print(f"Level {level} obstacles:\n{env['obstacles']}")
+    #     except Exception as e:
+    #         print(f"Error generating level {level}: {str(e)}")
+
+    # env = generate_curriculum_environment(2, gen_fig=True)
+    # plt.show()
+
+    # input("ENTER to save file")
+    # # Save to file
+    # with open('env5-1.pkl', 'wb') as f:
+    #     pickle.dump(env, f)
+
+    env = genCurEnv_2()
