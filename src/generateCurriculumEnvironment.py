@@ -13,10 +13,10 @@ def generate_curriculum_environment(curriculum_level: int, gen_fig: bool = False
     # ===== Curriculum Presets =====
     presets = {
         1: {'num_obs': 0, 'grid_size': 10, 'min_gap': 0},
-        2: {'num_obs': 3, 'grid_size': 15, 'min_gap': 3.0},
-        3: {'num_obs': 4, 'grid_size': 20, 'min_gap': 2.5},
-        4: {'num_obs': 5, 'grid_size': 25, 'min_gap': 1.5},
-        5: {'num_obs': 6, 'grid_size': 30, 'min_gap': 1.5}
+        2: {'num_obs': 3, 'grid_size': 15, 'min_gap': 1.5},
+        3: {'num_obs': 4, 'grid_size': 20, 'min_gap': 1.5},
+        4: {'num_obs': 8, 'grid_size': 25, 'min_gap': 1.2},
+        5: {'num_obs': 10, 'grid_size': 30, 'min_gap': 1.15}
     }
     params = presets[curriculum_level]
     
@@ -95,7 +95,7 @@ def generate_curriculum_environment(curriculum_level: int, gen_fig: bool = False
                 raise RuntimeError("Failed to place extra obstacle")
 
     # Need to pass 6 obstacles, pad any missing with far away obstacles
-    while obstacles.shape[0] < 6:
+    while obstacles.shape[0] < 20:
         dist = 150                                      # put a dummy obstacle far away
         angle = np.deg2rad(np.random.randint(0,90))     # randomise angle to obstacle and pos
         false_obs = np.round(np.array([np.cos(angle)*dist , np.sin(angle)*dist, (np.random.randint(1,101))/10]),1)

@@ -107,8 +107,8 @@ class NMPC_CBF_MULTI_N:
                 #       ecbf : lfh + k*h >=0
                 obs =solver["obstacles"][j,:] 
                 a = (obs[2] + self.vehRad)**-2
-                h = a*(st[0]-obs[0])**2 + a*(st[1]-obs[1])**2 + 1
-                lfh = 2*a*(st[0]-obs[0])*( (st_next[0]-st[0]/self.dt)) + 2*a*(st[1]-obs[1])*( (st_next[1]-st[1]/self.dt))
+                h = a*(st[0]-obs[0])**2 + a*(st[1]-obs[1])**2 - 1
+                lfh = 2*a*(st[0]-obs[0])*( (st_next[0]-st[0])/self.dt) + 2*a*(st[1]-obs[1])*( (st_next[1]-st[1])/self.dt)
                 solver["opt"].subject_to( lfh + solver["cbfParms"][j]*h >= 0)
 
 
