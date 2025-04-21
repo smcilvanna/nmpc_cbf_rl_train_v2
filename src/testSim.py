@@ -160,32 +160,25 @@ def plotSimdata(simdata,target):
     plt.tight_layout()
     plt.show()
 
-def simulateStep(stepTime, startState, obstacles ,cbf ):
-    simSteps = int(stepTime / 0.1)          # hardcoded timestep dt = 0.1
-    simdata = np.zeros(( simSteps + 1, 10))     # [stepIndex solveTime x y yaw v w sep N  _ ]
-    simdata[0,2:5] = startState                 #   0           1      2 3  4  5 6  7  8  9
-    currentPos = startState
-    for i in range(1,simSteps+1):
-        t = time.time()
-        u = nmpc.solve(targetPos,currentPos,obstacles,cbf)
-        currentPos = nmpc.stateHorizon[1,:]
-        simdata[i,0] = i
-        simdata[i,1] = time.time() - t
-        simdata[i,2:5] = currentPos
-        simdata[i,5:7] = u
-        collision = False
-        sep = 1000.0
-        for obs in obstacles:
-            c, s = checkCollision(currentPos,obs)
-            collision = collision and c
-            if s < sep:
-                sep = s
-        simdata[i,7] = sep
-        simdata[i,8] = nmpc.currentN
-        if collision:
-            print("CRASH!")
-            break
-    return simdata         
+def simulateStep(startState,cbf):
+    t = time.time()
+    u = nmpc.solve(startState,cbf)
+    currentPos = nmpc.stateHorizon[1,:]
+    mpcTime = time.time() - t
+    return currentPos, u, mpcTime         
+    
+    # collision = False
+    # sep = 1000.0
+    # for obs in obstacles:
+    #     c, s = checkCollision(currentPos,obs)
+    #     collision = collision and c
+    #     if s < sep:
+    #         sep = s
+    # simdata[i,7] = sep
+    # simdata[i,8] = nmpc.currentN
+    # if collision:
+    #     print("CRASH!")
+    #     break
 
 def checkCollision(vehiclePos, obstacle):
     cen_sep = np.linalg.norm(vehiclePos[0:2] - obstacle[0:2])
@@ -193,52 +186,60 @@ def checkCollision(vehiclePos, obstacle):
     collision = safe_sep <= 0.0 
     return collision, safe_sep
 
-def getStepObservations(simdata,obstacles,env):
+def calculate_reward(step, prev_state, current_state, solve_time, actions, prev_actions,
+                     tpCnt, terminal_condition, init_dist, gates_passed):
+    # --- Every Step Components ---
+    reward = 0
+    
+    # 1. Collision Penalty (Terminal)
+    if terminal_condition == "collision":
+        reward -= 100
+    
+    # 2. Velocity Maintenance (Gaussian around 0.8 m/s)
+    velocity = np.linalg.norm(current_state[5])
+    reward += 1.0 * np.exp(-2 * (velocity - 0.8)**2)
+    
+    # 3. Progress (Normalized Δ distance)
+    prev_dist = np.linalg.norm(prev_state[0:2] - targetPos[0:2])
+    curr_dist = np.linalg.norm(current_state[0:2] - targetPos[0:2])
+    reward += 2.5 * (prev_dist - curr_dist) / init_dist  # Scale by initial distance
+    
+    # 4. Action Smoothness Penalty
+    action_diff = np.linalg.norm(actions - prev_actions) / 2.0  # Assuming actions ∈ [-1,1]
+    reward -= 0.8 * action_diff
+    
+    # 5. Solver Time Penalty (Normalized to 0.1s max)
+    reward -= 1.2 * (solve_time / 0.1)
+    
+    # --- Every 10 Steps ---
+    if step % 10 == 0:
+        # 7. Low Velocity Penalty (1s rolling average)
+        if np.mean(simdata[-10:, 5]) < 0.1:
+            reward -= 20
+    
+    # --- Terminal/Episodic Bonuses ---
+    if terminal_condition == "target_reached":
+        reward += 100 + 15 * gates_passed  # Base + gate bonus
+    
+    return reward
 
-    state = simdata[-1,2:5]                                                             
-    state = np.append(state, [0.0, np.sin(state[2]), np.cos(state[2])])                      
+
+def getStepObservations(currentState,u,mpcTime,env):
+    state = currentState                                                
+    state = np.append(state, [0.0, np.sin(state[2]), np.cos(state[2]), u ])     #<<<<<<<<<<<<<<< START WITH ERROR HERE >>>>>>>>>>>>>>>>>>                 
     state[2] = np.max([0, np.min([1,(targetPos[0]-state[0])/np.max([0.0001,targetPos[0]])])]) # scaled to target normalised x
     state[3] = np.max([0, np.min([1,(targetPos[1]-state[1])/np.max([0.0001,targetPos[1]])])]) # scaled to target normalised y
-    avev  = np.average(simdata[:,5])
-    maxv  = np.max(simdata[:,5])
-    avew  = np.average(abs(simdata[:,6]))
-    maxw  = np.max(abs(simdata[:,6]))
-    ave_mpct = np.average(simdata[:,1])
-    max_mpct = np.max(simdata[:,1])
     obsObsv =np.empty((0,4))
     for o in obstacles:
         obsObsv = np.append(obsObsv,obstacle_metrics(state[0:2], o))
-
-    # terminal state checks
-    
-    # how many path targets hit
-    targetPaths = env["pass_targets"]
-    tpCnt = 0
-    for pgt in targetPaths.reshape(-1, targetPaths.shape[-1]):
-        for st in simdata[:,0:2]:
-            hitPath, _ = checkCollision(st,np.append(pgt,0.55))
-            if hitPath:
-                tpCnt += 1
-                break
-
-    # collision
-    collide = np.min(simdata[:,7]) <= 0.00
-
-    # at target
-    tgt = np.append(targetPos, 0.1)
-    targetInfo = obstacle_metrics(state[0:2],tgt)
-    targetDist = startDist - targetInfo[0]
-    targetProgress = np.max((0.00,targetDist)) / startDist
-
-    observations = np.hstack([  state.reshape((1,-1)),      # 4
-                                obsObsv.reshape((1,-1)),    # 20*3 = 80
-                                targetInfo[0:3].reshape((1,-1)), # 4 
-                                np.array([[avev, maxv, avew, maxw, ave_mpct, max_mpct, tpCnt, targetProgress]])  ])
-    print_observations(observations)
-    print(observations.shape)
-    normalised_observations = normalise_observations(observations)
-    print_observations(normalised_observations)
-    exit()
+    targetInfo = obstacle_metrics(state[0:2],np.append(targetPos, 0.1))   # target area [distance sin() cos() radii]
+    targetInfo[3] = np.max((0.00, env["startDist"] - targetInfo[0] )) / env["startDist"]    # replace targetInfo radii with progress %
+    observations = np.hstack([  state.reshape((1,-1)), obsObsv.reshape((1,-1)), targetInfo.reshape((1,-1)) , mpcTime ])
+    # print_observations(observations)
+    # print(observations.shape)
+    # normalised_observations = normalise_observations(observations)
+    # print_observations(normalised_observations)
+    # exit()
     return observations
 
 def normalise_observations(obs):
@@ -331,24 +332,28 @@ if __name__ == "__main__":
     Nvalues = [10 , 30, 60 ,100] #np.arange(10,110,10)#[10, 20, 30, 40, 50]
     nmpc = NMPC_CBF_MULTI_N(0.1, Nvalues, 20)
     print("NMPC_CBF_MULTI_N class initialized successfully.")
-    nmpc.solversIdx = np.random.randint(0,len(Nvalues)) # random start solver
-    nmpc.currentN = nmpc.nVals[nmpc.solversIdx]
-    obstacles = env['obstacles']
-    # obstacles[:,1] -= 2.0
-    targetPos = env['target_pos']
-    startPos = np.array([0,0,targetPos[2]])
-    startDist = np.linalg.norm(targetPos)
-    epStepTime = 2
-    epMaxTime = 15
-    runtime = 0
+    
+    # Set initial mpc parameters
+    nmpc.solversIdx = np.random.randint(0,len(Nvalues)) # random start solver index
+    nmpc.currentN = nmpc.nVals[nmpc.solversIdx]         # random start solver N
+    obstacles = env['obstacles']                        # obstacle config from environment
+    targetPos = env['target_pos']                       # target position from environment
+    nmpc.setObstacles(obstacles)
+    nmpc.setTarget(targetPos)
+    
+    currentPos = np.array([0,0,targetPos[2]])
     targetArea = np.append(targetPos,0.05)
-    while runtime < epMaxTime:
-        cbf = np.tile(1000,nmpc.nObs)#np.random.randint(1, 1000, size=(1, 20))/100 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< CBF VALUES
-        simdata = simulateStep(epStepTime,startPos,obstacles, cbf)
+    
+    cbf = np.tile(0.1,nmpc.nObs)#np.random.randint(1, 1000, size=(1, 20))/100 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< CBF VALUES
+    
+    episodeDone = False
+    while not episodeDone:
+         
+        newPos, u, mpcTime = simulateStep(currentPos, cbf)
         
         # get observations for next step
-        x = getStepObservations(simdata,obstacles,env)
-        
+        x = getStepObservations(newPos,u,mpcTime,env)
+        print(x)
         exit()
         
         startPos = simdata[-1,2:5]
@@ -374,3 +379,18 @@ if __name__ == "__main__":
     # plotSimdata(simdata,targetPos)
 
 
+
+    # # terminal state checks
+    
+    # # how many path targets hit
+    # targetPaths = env["pass_targets"]
+    # tpCnt = 0
+    # for pgt in targetPaths.reshape(-1, targetPaths.shape[-1]):
+    #     for st in simdata[:,0:2]:
+    #         hitPath, _ = checkCollision(st,np.append(pgt,0.55))
+    #         if hitPath:
+    #             tpCnt += 1
+    #             break
+
+    # # collision
+    # collide = np.min(simdata[:,7]) <= 0.00

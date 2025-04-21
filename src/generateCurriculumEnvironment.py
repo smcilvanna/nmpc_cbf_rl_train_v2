@@ -248,10 +248,13 @@ def genCurEnv_2(curriculum_level, gen_fig=False):
         false_obs = np.round(np.array([np.cos(angle)*dist , np.sin(angle)*dist, (np.random.randint(1,101))/10]),1)
         obstacles = np.vstack([obstacles, false_obs])     # add to stack
     
+    startDist = np.linalg.norm(target_pos)
+
     out = {
         'target_pos': target_pos,
         'obstacles': obstacles,
-        'pass_targets' : passTarget
+        'pass_targets' : passTarget,
+        'startDist' : startDist
         }
 
 

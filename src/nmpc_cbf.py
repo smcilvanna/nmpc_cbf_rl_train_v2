@@ -132,7 +132,7 @@ class NMPC_CBF_MULTI_N:
         solver["opt"].subject_to(solver["opt"].bounded(self.min_theta, solver["stateHorizon"][:,2], self.max_theta))    
         solver["opt"].subject_to(solver["opt"].bounded(self.min_v,     solver["ctrlHorizon"][:,0], self.max_v))
         solver["opt"].subject_to(solver["opt"].bounded(self.min_omega, solver["ctrlHorizon"][:,1], self.max_omega))
-        
+
         # setup optimization parameters #max iter was 2000
         opts_setting = {'ipopt.max_iter':500,
                         'ipopt.print_level':0,
@@ -152,8 +152,16 @@ class NMPC_CBF_MULTI_N:
             print(f"Couldn't Find {N} Horizon Length Solver. END")
             exit()
         return index
+    
+    def setObstacles(self,obstacles):
+        for solver in self.solvers:
+            solver["opt"].set_value(solver["obstacles"], obstacles )
 
-    def solve(self, targetPos, currentPos, obstacles, cbfParms):
+    def setTarget(self,targetPos):
+        for solver in self.solvers:
+            solver["opt"].set_value(solver["stateTgt"],  targetPos )
+
+    def solve(self, currentPos, cbfParms):
         # On first step init state and control horizon arrays
         if self.ctrlHorizon.size == 0 and self.stateHorizon.size == 0:
             self.stateHorizon = np.zeros((self.currentN+1, 3))
@@ -162,8 +170,6 @@ class NMPC_CBF_MULTI_N:
         solver = self.solvers[self.solversIdx]
         # set the parameters
         solver["opt"].set_value(solver["stateNow"],  currentPos)
-        solver["opt"].set_value(solver["stateTgt"],  targetPos )
-        solver["opt"].set_value(solver["obstacles"], obstacles )
         solver["opt"].set_value(solver["cbfParms"],  cbfParms  )
         # set the optimisation variables
         solver["opt"].set_initial(solver["stateHorizon"], self.stateHorizon)    # provide the initial guess of state for the next step
