@@ -195,12 +195,15 @@ def checkCollision(vehiclePos, obstacle):
 
 def getStepObservations(simdata,obstacles,env):
 
-    state = simdata[-1,2:5]
-    avev  = np.sum(simdata[:,5])
+    state = simdata[-1,2:5]                                                             
+    state = np.append(state, [0.0, np.sin(state[2]), np.cos(state[2])])                      
+    state[2] = np.max([0, np.min([1,(targetPos[0]-state[0])/np.max([0.0001,targetPos[0]])])]) # scaled to target normalised x
+    state[3] = np.max([0, np.min([1,(targetPos[1]-state[1])/np.max([0.0001,targetPos[1]])])]) # scaled to target normalised y
+    avev  = np.average(simdata[:,5])
     maxv  = np.max(simdata[:,5])
-    avew  = np.sum(abs(simdata[:,6]))
+    avew  = np.average(abs(simdata[:,6]))
     maxw  = np.max(abs(simdata[:,6]))
-    ave_mpct = np.sum(simdata[:,1])
+    ave_mpct = np.average(simdata[:,1])
     max_mpct = np.max(simdata[:,1])
     obsObsv =np.empty((0,4))
     for o in obstacles:
@@ -225,22 +228,85 @@ def getStepObservations(simdata,obstacles,env):
     tgt = np.append(targetPos, 0.1)
     targetInfo = obstacle_metrics(state[0:2],tgt)
     targetDist = startDist - targetInfo[0]
-    targetProgress = np.min((0.00,targetDist)) / startDist
-    temp = np.array([avev, maxv, avew, maxw, ave_mpct, max_mpct, tpCnt, targetProgress])
+    targetProgress = np.max((0.00,targetDist)) / startDist
 
-    print(state)
-    print(temp)
-    print(obsObsv)
-    print(targetInfo)
-    print(state.shape)
-    print(temp.shape)
-    print(obsObsv.shape)
-    print(targetInfo.shape)
-
-    observations = 0
-
+    observations = np.hstack([  state.reshape((1,-1)),      # 4
+                                obsObsv.reshape((1,-1)),    # 20*3 = 80
+                                targetInfo[0:3].reshape((1,-1)), # 4 
+                                np.array([[avev, maxv, avew, maxw, ave_mpct, max_mpct, tpCnt, targetProgress]])  ])
+    print_observations(observations)
+    print(observations.shape)
+    normalised_observations = normalise_observations(observations)
+    print_observations(normalised_observations)
+    exit()
     return observations
 
+def normalise_observations(obs):
+    obs = obs.flatten()
+    norm = obs.copy()
+
+    # Normalisation assumptions
+    # Position: [-10, 10] m → [-1, 1]
+    norm[0:2] = np.clip(obs[0:2] / 10.0, -1.0, 1.0)
+    
+    # Normalised x y & Heading: sin(θ), cos(θ): already in [0 1] [-1, 1]
+    norm[2:6] = obs[2:6]
+    i = 6
+    
+    for _ in range(nmpc.nObs): 
+        norm[i] = np.clip(obs[i] / 10.0, 0.0, 1.0)     # clearance
+        norm[i+1] = obs[i+1]                           # sin(θ)
+        norm[i+2] = obs[i+2]                           # cos(θ)
+        norm[i+3] = np.clip(obs[i+3] / 10.0, 0.0, 1.0)
+        i += 4
+
+    # Target clearance (i), sin(θ), cos(θ)
+    norm[i]   = np.clip(obs[i] / 10.0, 0.0, 1.0)
+    norm[i+1] = obs[i+1]
+    norm[i+2] = obs[i+2]
+    i += 3
+
+    # Motion metrics
+    norm[i]   = np.clip(obs[i]   / 2.0,  0.0, 1.0)   # ave speed
+    norm[i+1] = np.clip(obs[i+1] / 2.0,  0.0, 1.0)   # max speed
+    norm[i+2] = np.clip(obs[i+2] / 2.0,  0.0, 1.0)   # ave angular
+    norm[i+3] = np.clip(obs[i+3] / 2.0,  0.0, 1.0)   # max angular
+    norm[i+4] = np.clip(obs[i+4] / 0.1,  0.0, 1.0)   # ave MPC t
+    norm[i+5] = np.clip(obs[i+5] / 0.1,  0.0, 1.0)   # max MPC t
+
+    # Targets hit: assume max 10 → [0, 1]
+    norm[i+6] = np.clip(obs[i+6] / 10.0, 0.0, 1.0)
+
+    # Target progress: already [0, 1]
+    norm[i+7] = obs[i+7]
+
+    return norm
+
+
+
+def print_observations(obs):
+    obs = obs.flatten()
+    # n_fixed = 4
+    # n_metrics = 4
+    # n_target = 3
+    # n_perf = 8
+
+    full_labels = [
+        "Current X", "Current Y", "sin(yaw)", "cos(yaw)", "X/x-target", "Y/y-target"
+    ]
+    for i in range(nmpc.nObs):
+        full_labels += [
+            f"Obstacle {i+1} Clearance", f"Obstacle {i+1} sin(θ)",
+            f"Obstacle {i+1} cos(θ)", f"Obstacle {i+1} radius"
+        ]
+    full_labels += [
+        "Target Clearance", "Target sin(θ)", "Target cos(θ)",
+        "Average Speed", "Max Speed", "Average Angular Rate", "Max Angular Rate",
+        "Average MPC Time", "Max MPC Time", "Targets Hit", "Target Progress"
+    ]
+
+    for l, v in zip(full_labels, obs):
+        print(f"{l}: {v:.4f}")
 
 def obstacle_metrics(state, obstacle):
     dx, dy = obstacle[0] - state[0], obstacle[1] - state[1]
