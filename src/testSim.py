@@ -193,6 +193,61 @@ def checkCollision(vehiclePos, obstacle):
     collision = safe_sep <= 0.0 
     return collision, safe_sep
 
+def getStepObservations(simdata,obstacles,env):
+
+    state = simdata[-1,2:5]
+    avev  = np.sum(simdata[:,5])
+    maxv  = np.max(simdata[:,5])
+    avew  = np.sum(abs(simdata[:,6]))
+    maxw  = np.max(abs(simdata[:,6]))
+    ave_mpct = np.sum(simdata[:,1])
+    max_mpct = np.max(simdata[:,1])
+    obsObsv =np.empty((0,4))
+    for o in obstacles:
+        obsObsv = np.append(obsObsv,obstacle_metrics(state[0:2], o))
+
+    # terminal state checks
+    
+    # how many path targets hit
+    targetPaths = env["pass_targets"]
+    tpCnt = 0
+    for pgt in targetPaths.reshape(-1, targetPaths.shape[-1]):
+        for st in simdata[:,0:2]:
+            hitPath, _ = checkCollision(st,np.append(pgt,0.55))
+            if hitPath:
+                tpCnt += 1
+                break
+
+    # collision
+    collide = np.min(simdata[:,7]) <= 0.00
+
+    # at target
+    tgt = np.append(targetPos, 0.1)
+    targetInfo = obstacle_metrics(state[0:2],tgt)
+    targetDist = startDist - targetInfo[0]
+    targetProgress = np.min((0.00,targetDist)) / startDist
+    temp = np.array([avev, maxv, avew, maxw, ave_mpct, max_mpct, tpCnt, targetProgress])
+
+    print(state)
+    print(temp)
+    print(obsObsv)
+    print(targetInfo)
+    print(state.shape)
+    print(temp.shape)
+    print(obsObsv.shape)
+    print(targetInfo.shape)
+
+    observations = 0
+
+    return observations
+
+
+def obstacle_metrics(state, obstacle):
+    dx, dy = obstacle[0] - state[0], obstacle[1] - state[1]
+    dist = np.hypot(dx, dy) - (nmpc.vehRad + obstacle[2])
+    angle = np.arctan2(dy, dx)
+    return np.array([dist, np.sin(angle), np.cos(angle), obstacle[2]])
+
 if __name__ == "__main__":
     print("[START]")
     random_env = True
@@ -200,13 +255,14 @@ if __name__ == "__main__":
         # env = genenv(2, gen_fig=True)
         # plt.show()
         # input("[ENTER] to begin")
-        env = genenv2(curriculum_level=3,gen_fig=False)
+        env = genenv2(curriculum_level=1,gen_fig=True)
+        plt.show()
     else:
-        file_path = './env2-1.pkl'
+        file_path = './env4-1.pkl'
         with open(file_path, 'rb') as f:
             env = pickle.load(f)
-
-    Nvalues = [20 , 20] #np.arange(10,110,10)#[10, 20, 30, 40, 50]
+    # exit()
+    Nvalues = [10 , 30, 60 ,100] #np.arange(10,110,10)#[10, 20, 30, 40, 50]
     nmpc = NMPC_CBF_MULTI_N(0.1, Nvalues, 20)
     print("NMPC_CBF_MULTI_N class initialized successfully.")
     nmpc.solversIdx = np.random.randint(0,len(Nvalues)) # random start solver
@@ -215,13 +271,20 @@ if __name__ == "__main__":
     # obstacles[:,1] -= 2.0
     targetPos = env['target_pos']
     startPos = np.array([0,0,targetPos[2]])
+    startDist = np.linalg.norm(targetPos)
     epStepTime = 2
     epMaxTime = 15
     runtime = 0
     targetArea = np.append(targetPos,0.05)
     while runtime < epMaxTime:
-        cbf = np.tile(10,nmpc.nObs)#np.random.randint(1, 1000, size=(1, 20))/100 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< CBF VALUES
+        cbf = np.tile(1000,nmpc.nObs)#np.random.randint(1, 1000, size=(1, 20))/100 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< CBF VALUES
         simdata = simulateStep(epStepTime,startPos,obstacles, cbf)
+        
+        # get observations for next step
+        x = getStepObservations(simdata,obstacles,env)
+        
+        exit()
+        
         startPos = simdata[-1,2:5]
         runtime += epStepTime
         if runtime == epStepTime:

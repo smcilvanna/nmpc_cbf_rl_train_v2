@@ -210,9 +210,11 @@ def genCurEnv_2(curriculum_level, gen_fig=False):
         passTarget = gtgt
         passTarget[0] += np.sign(gateOffset)*((2*obsRad)+0.55+ 0.5*gateGap)*np.cos(target_yaw+np.pi/2) 
         passTarget[1] += np.sign(gateOffset)*((2*obsRad)+0.55+ 0.5*gateGap)*np.sin(target_yaw+np.pi/2)
+    
     elif curriculum_level == 3:
         obstacles, gtgt = setGate(start_pos,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
         passTarget = gtgt
+    
     elif curriculum_level == 4:
         gateDist = np.round(np.random.uniform(12,22))
         nGates = 5
@@ -246,6 +248,13 @@ def genCurEnv_2(curriculum_level, gen_fig=False):
         false_obs = np.round(np.array([np.cos(angle)*dist , np.sin(angle)*dist, (np.random.randint(1,101))/10]),1)
         obstacles = np.vstack([obstacles, false_obs])     # add to stack
     
+    out = {
+        'target_pos': target_pos,
+        'obstacles': obstacles,
+        'pass_targets' : passTarget
+        }
+
+
     if gen_fig:
         fig, ax = plt.subplots()
         # ax.plot(0, 0, 'bo', markersize=8, label='Start')
@@ -255,7 +264,8 @@ def genCurEnv_2(curriculum_level, gen_fig=False):
         ax.add_patch(Circle((0, 0), 1.0, color='blue', alpha=0.1))      # vehicle start clearance
         ax.add_patch(Circle((0, 0), 0.55, color='black', alpha=0.8))      # vehicle start clearance
         ax.add_patch(Circle(target_pos, 0.5, color='green', alpha=0.1)) # finish clearance
-        for pgt in passTarget:
+        
+        for pgt in passTarget.reshape(-1, passTarget.shape[-1]):
             ax.add_patch(Circle(pgt, 0.55, color='green',alpha=0.9))
         
         # Draw obstacles
@@ -266,15 +276,13 @@ def genCurEnv_2(curriculum_level, gen_fig=False):
         ax.set_ylim((-10,grid))
         ax.set_aspect('equal')
         # ax.legend()
+        out["fig"] = fig
         plt.show()
+    else:
+        out["fig"] = None
+
     
     
-    out = {
-    'target_pos': target_pos,
-    'obstacles': obstacles,
-    'pass_targets' : passTarget
-    }
-    # Need to pass 6 obstacles, pad any missing with far away obstacles
 
     return out
 
@@ -335,9 +343,9 @@ if __name__ == "__main__":
     # env = generate_curriculum_environment(2, gen_fig=True)
     # plt.show()
 
-    # input("ENTER to save file")
-    # # Save to file
-    # with open('env5-1.pkl', 'wb') as f:
-    #     pickle.dump(env, f)
-
     env = genCurEnv_2(curriculum_level=4 , gen_fig=True)
+    input("ENTER to save file")
+    # Save to file
+    with open('env4-1.pkl', 'wb') as f:
+        pickle.dump(env, f)
+
