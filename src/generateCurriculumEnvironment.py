@@ -142,58 +142,137 @@ def generate_curriculum_environment(curriculum_level: int, gen_fig: bool = False
 def _generate_valid_target(grid_size: float) -> np.ndarray:
     """Generate target position >25% of grid size from origin."""
     min_coord = grid_size * 0.25
-    return np.array([
-        np.random.uniform(min_coord, grid_size),
-        np.random.uniform(min_coord, grid_size)
-    ])
+    ridx = np.random.randint(0,2)
+    target = np.zeros(2)
+    target[ridx] = np.random.uniform(min_coord, grid_size)
+    target[1-ridx] = grid_size
+    return target
 
 
 #########################################################################################################################
 #########################################################################################################################
 #########################################################################################################################
 
-def setGate(start_pos,dist,rad,gap,offset):
+def setGate(start_pos,dist,rad,gap,offset,ngates):
     r = [rad , rad]
-    gate1 = place_obstacles(start_pos, radii=r, dist_to_gap= dist, offset_perp=-offset, gap_size=gap )
-    gate2 = place_obstacles(start_pos, radii=r, dist_to_gap= dist, offset_perp=-offset, gap_size=(gap + 4*rad + 0.4))
-    gate3 = place_obstacles(start_pos, radii=r, dist_to_gap= dist, offset_perp=-offset, gap_size=(gap + 8*rad + 0.4))
-    return np.vstack([gate1,gate2,gate3])
+    gate=np.empty((0,3))
+    for i in range(ngates):
+        gatei, gtgt = place_obstacles(start_pos, radii=r, dist_to_gap= dist, offset_perp=-offset, gap_size=(gap + 4*i*rad + 0.8*i) )
+        gate = np.vstack([gate,gatei])    
+    return gate, gtgt
 
-def genCurEnv_2():
-    target_pos = _generate_valid_target(30)
+def genCurEnv_2(curriculum_level, gen_fig=False):
+    # Set Target and Start Positions
+    if curriculum_level == 1:
+        # two mostly overlapping obstacles along path
+        grid = 30
+        gateDist = 15
+        gateOffset = 0.0
+        nGates = 1
+        obsRad = np.round(np.random.uniform(0.5,10.1),1)
+        gateGap = -obsRad*np.random.uniform(1.8, 2.2)
+        while abs(gateOffset)  < 0.1:
+            gateOffset = np.random.uniform(-(obsRad*0.95),(obsRad*0.95)) 
+        
+    elif curriculum_level == 2:
+        # two overlapping obstacles with concave trap
+        grid = 30
+        gateDist = np.round(np.random.uniform(15,25))
+        nGates = 1
+        obsRad = np.round(np.random.uniform(0.5,10.1),1)
+        gateGap = -obsRad*np.random.uniform(0, 0.5)
+        gateOffset = 0.0
+        while abs(gateOffset)  < 0.1:
+            gateOffset = np.round(np.random.uniform(-(obsRad*0.95),(obsRad*0.95)),1)
+    elif curriculum_level == 3:
+        grid = 40
+        gateDist = np.round(np.random.uniform(15,25))
+        nGates = 5
+        obsRad = np.round(np.random.uniform(0.5,10.1),1)
+        gateGap = np.random.uniform(1.2, 2.5)
+        gateOffset = 0.0
+        while abs(gateOffset)  < obsRad*0.4:
+            gateOffset = np.round(np.random.uniform(-(obsRad*3.5),(obsRad*3.5)),1)
+    elif curriculum_level == 4:
+        grid = 50
+    else:
+        print("[ERROR] Invalid curriculum level.")
+        exit()
+
+    target_pos = _generate_valid_target(grid)
     target_yaw = np.arctan2(target_pos[1],target_pos[0])
     target_pos = np.append(target_pos, target_yaw)
     start_pos = np.array([0.0, 0.0, target_yaw])
     
-    obstacles = setGate(start_pos,dist=10.0,rad=3.0,gap=3.0,offset=5.0)
+
+    if curriculum_level in [1,2]:
+        obstacles, gtgt = setGate(start_pos,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
+        passTarget = gtgt
+        passTarget[0] += np.sign(gateOffset)*((2*obsRad)+0.55+ 0.5*gateGap)*np.cos(target_yaw+np.pi/2) 
+        passTarget[1] += np.sign(gateOffset)*((2*obsRad)+0.55+ 0.5*gateGap)*np.sin(target_yaw+np.pi/2)
+    elif curriculum_level == 3:
+        obstacles, gtgt = setGate(start_pos,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
+        passTarget = gtgt
+    elif curriculum_level == 4:
+        gateDist = np.round(np.random.uniform(12,22))
+        nGates = 5
+        obsRad = np.round(np.random.uniform(0.5,10.1),1)
+        gateGap = np.random.uniform(1.2, 2.5)
+        gateOffset = 0.0
+        while abs(gateOffset)  < obsRad*0.4:
+            gateOffset = np.round(np.random.uniform(-(obsRad*3.5),(obsRad*3.5)),1)
+        obstacles1, gtgt1 = setGate(start_pos,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
+
+        # second gap
+        passDist = np.linalg.norm(target_pos[0:2]-gtgt1)
+        print(passDist)
+        gateDist = np.round(np.random.uniform(passDist*0.25,passDist*0.75))
+        nGates = 5
+        obsRad = np.round(np.random.uniform(0.5,(10.5-obsRad)),1)
+        gateGap = np.random.uniform(1.2, 2.5)
+        gate1offset = gateOffset
+        gateOffset = 0.0
+        while abs(gateOffset)  < obsRad*0.4 and np.sign(gateOffset) != np.sign(gate1offset):
+            gateOffset = np.round(np.random.uniform(-(obsRad*3.5),(obsRad*3.5)),1)
+        gapStart = np.array([gtgt1[0], gtgt1[1], np.arctan2( target_pos[1]-gtgt1[1], target_pos[0]-gtgt1[0])])
+        obstacles2, gtgt2 = setGate(gapStart,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
+        obstacles = np.vstack([obstacles1, obstacles2])
+        passTarget = np.vstack([gtgt1,gtgt2])
+
+
     while obstacles.shape[0] < 20:
         dist = 150                                      # put a dummy obstacle far away
         angle = np.deg2rad(np.random.randint(0,90))     # randomise angle to obstacle and pos
         false_obs = np.round(np.array([np.cos(angle)*dist , np.sin(angle)*dist, (np.random.randint(1,101))/10]),1)
         obstacles = np.vstack([obstacles, false_obs])     # add to stack
     
-    fig, ax = plt.subplots()
-    ax.plot(0, 0, 'bo', markersize=8, label='Start')
-    ax.plot(target_pos[0], target_pos[1], 'gx', markersize=10, label='Target')
-    
-    # Draw safety zones
-    ax.add_patch(Circle((0, 0), 1.0, color='blue', alpha=0.1))
-    ax.add_patch(Circle(target_pos, 0.5, color='green', alpha=0.1))
-    
-    # Draw obstacles
-    for obs in obstacles:
-        ax.add_patch(Circle(obs[:2], obs[2], fill=False, color='red'))
-    
-    ax.set_xlim((-10,20))
-    ax.set_ylim((-10,20))
-    ax.set_aspect('equal')
-    # ax.legend()
-    plt.show()
+    if gen_fig:
+        fig, ax = plt.subplots()
+        # ax.plot(0, 0, 'bo', markersize=8, label='Start')
+        ax.plot(target_pos[0], target_pos[1], 'gx', markersize=10, label='Target')
+        
+        # Draw safety zones
+        ax.add_patch(Circle((0, 0), 1.0, color='blue', alpha=0.1))      # vehicle start clearance
+        ax.add_patch(Circle((0, 0), 0.55, color='black', alpha=0.8))      # vehicle start clearance
+        ax.add_patch(Circle(target_pos, 0.5, color='green', alpha=0.1)) # finish clearance
+        for pgt in passTarget:
+            ax.add_patch(Circle(pgt, 0.55, color='green',alpha=0.9))
+        
+        # Draw obstacles
+        for obs in obstacles:
+            ax.add_patch(Circle(obs[:2], obs[2], fill=False, color='red'))
+        
+        ax.set_xlim((-10,grid))
+        ax.set_ylim((-10,grid))
+        ax.set_aspect('equal')
+        # ax.legend()
+        plt.show()
     
     
     out = {
     'target_pos': target_pos,
     'obstacles': obstacles,
+    'pass_targets' : passTarget
     }
     # Need to pass 6 obstacles, pad any missing with far away obstacles
 
@@ -236,10 +315,10 @@ def place_obstacles(start_pose, radii, dist_to_gap, offset_perp, gap_size):
     obs1_pos = gap_center - (center_to_center/2) * perp_dir
     obs2_pos = gap_center + (center_to_center/2) * perp_dir
     
-    return np.array([
-        [obs1_pos[0], obs1_pos[1], r1],
-        [obs2_pos[0], obs2_pos[1], r2]
-    ])
+    obstacles = np.array([ [obs1_pos[0], obs1_pos[1], r1],
+                           [obs2_pos[0], obs2_pos[1], r2] ])
+    
+    return obstacles, gap_center
 
 
 if __name__ == "__main__":
@@ -261,4 +340,4 @@ if __name__ == "__main__":
     # with open('env5-1.pkl', 'wb') as f:
     #     pickle.dump(env, f)
 
-    env = genCurEnv_2()
+    env = genCurEnv_2(curriculum_level=4 , gen_fig=True)

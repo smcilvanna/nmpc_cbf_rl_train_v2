@@ -200,7 +200,7 @@ if __name__ == "__main__":
         # env = genenv(2, gen_fig=True)
         # plt.show()
         # input("[ENTER] to begin")
-        env = genenv2()
+        env = genenv2(curriculum_level=3,gen_fig=False)
     else:
         file_path = './env2-1.pkl'
         with open(file_path, 'rb') as f:
