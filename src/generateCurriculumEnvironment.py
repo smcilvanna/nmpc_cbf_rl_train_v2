@@ -210,10 +210,11 @@ def genCurEnv_2(curriculum_level, gen_fig=False):
         passTarget = gtgt
         passTarget[0] += np.sign(gateOffset)*((2*obsRad)+0.55+ 0.5*gateGap)*np.cos(target_yaw+np.pi/2) 
         passTarget[1] += np.sign(gateOffset)*((2*obsRad)+0.55+ 0.5*gateGap)*np.sin(target_yaw+np.pi/2)
+        passTarget = [passTarget.tolist()]
     
     elif curriculum_level == 3:
         obstacles, gtgt = setGate(start_pos,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
-        passTarget = gtgt
+        passTarget = [gtgt.tolist()]
     
     elif curriculum_level == 4:
         gateDist = np.round(np.random.uniform(12,22))
@@ -239,7 +240,7 @@ def genCurEnv_2(curriculum_level, gen_fig=False):
         gapStart = np.array([gtgt1[0], gtgt1[1], np.arctan2( target_pos[1]-gtgt1[1], target_pos[0]-gtgt1[0])])
         obstacles2, gtgt2 = setGate(gapStart,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
         obstacles = np.vstack([obstacles1, obstacles2])
-        passTarget = np.vstack([gtgt1,gtgt2])
+        passTarget = [gtgt1.tolist(),gtgt2.tolist()]
 
 
     while obstacles.shape[0] < 20:
@@ -268,7 +269,7 @@ def genCurEnv_2(curriculum_level, gen_fig=False):
         ax.add_patch(Circle((0, 0), 0.55, color='black', alpha=0.8))      # vehicle start clearance
         ax.add_patch(Circle(target_pos, 0.5, color='green', alpha=0.1)) # finish clearance
         
-        for pgt in passTarget.reshape(-1, passTarget.shape[-1]):
+        for pgt in passTarget:
             ax.add_patch(Circle(pgt, 0.55, color='green',alpha=0.9))
         
         # Draw obstacles
@@ -347,9 +348,10 @@ if __name__ == "__main__":
     # plt.show()
 
     env = genCurEnv_2(curriculum_level=1 , gen_fig=True)
-    # input("ENTER to save file")
-    # # Save to file
-    # with open('env1-1.pkl', 'wb') as f:
-    #     pickle.dump(env, f)
+
+    input("ENTER to save file")
+    # Save to file
+    with open('env1-1.pkl', 'wb') as f:
+        pickle.dump(env, f)
 
 

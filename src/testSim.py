@@ -17,7 +17,12 @@ from episodeTracker import EpisodeTracker
 np.set_printoptions(precision=3, suppress=True)
 
 
-def plotSimdataAnimated(simdata, target, obstacles):
+def plotSimdataAnimated(ep,env):
+    
+    simdata = ep2simdata(ep)
+    ob = env['obstacles']
+    target = env['target_pos']
+        
     fig = plt.figure(figsize=(10, 6))
     
     ax1 = plt.subplot2grid((2, 6), (0, 0), rowspan=2, colspan=2)
@@ -51,7 +56,7 @@ def plotSimdataAnimated(simdata, target, obstacles):
     ax1.add_patch(target_circle)
     
     # Add obstacles
-    for obs in obstacles:
+    for obs in ob:
         circle = Circle(obs[0:2], obs[2], color='red')
         ax1.add_patch(circle)
 
@@ -203,48 +208,63 @@ def simulateStep(startState,cbf):
     mpcTime = time.time() - t
     return currentPos, u, mpcTime         
 
-def checkCollision(vehiclePos, obstacle):
-    cen_sep = np.linalg.norm(vehiclePos[0:2] - obstacle[0:2])
-    safe_sep = cen_sep - 0.55 - obstacle[2]
+def checkCollision(vehiclePos, obs):
+    cen_sep = np.linalg.norm(vehiclePos[0:2] - obs[0:2])
+    safe_sep = cen_sep - 0.55 - obs[2]
     collision = safe_sep <= 0.0 
     return collision, safe_sep
 
-def calculate_reward(epLog):
-        
-        # step, prev_state, current_state, solve_time, actions, prev_actions,
-        #              tpCnt, terminal_condition, init_dist, gates_passed):
+def calculate_reward(ep,isdone):
+    # Observations list (93)
+    #                        0     1     2         3        4         5       6    7
+    #   state (8)       : [x-pos y-pos sin(yaw) cos(yaw)  x-tgt-n   y-tgt-n   v    w ]
+    #                       8+o      9+o        10+o      11+o    (o =obsIndex*4)
+    #   obsObv (80)     : [dist, sin(angle), cos(angle), radius]
+    #                         88    89           90          91
+    #   targetInfo (4)  : [ dist, sin(angle), cos(angle) progress]
+    #                         92
+    #   mpcTime  (1)    : [ mpcTime ] 
+    observations = ep.latest_observation    
+    
     # --- Every Step Components ---
     reward = 0
+    # Velocity Maintenance (Gaussian around 0.8 m/s)
+    velocity = observations[6]
+    reward += 1.0 * np.exp(-2 * (velocity - 1.0)**2)
     
-    # 1. Collision Penalty (Terminal)
-    if terminal_condition == "collision":
-        reward -= 100
+    # Progress (Normalized Δ distance)
+    if len(ep.past_observations) > 1:
+        prev_dist = ep.past_observations[-1][88]
+        curr_dist = ep.latest_observation[88]
+        reward += 2.5 * (prev_dist - curr_dist)  # Scale by initial distance
     
-    # 2. Velocity Maintenance (Gaussian around 0.8 m/s)
-    velocity = np.linalg.norm(current_state[5])
-    reward += 1.0 * np.exp(-2 * (velocity - 0.8)**2)
+    # Action Smoothness Penalty
+    if len(ep.actions) > 1:
+        current_actions = ep.actions[-1]
+        prev_actions = ep.actions[-2]
+
+        print(current_actions)
+        print(prev_actions)
+
+        action_diff = np.linalg.norm(current_actions - prev_actions) / 2.0  # Assuming actions ∈ [-1,1]
+        reward -= 0.8 * action_diff
     
-    # 3. Progress (Normalized Δ distance)
-    prev_dist = np.linalg.norm(prev_state[0:2] - targetPos[0:2])
-    curr_dist = np.linalg.norm(current_state[0:2] - targetPos[0:2])
-    reward += 2.5 * (prev_dist - curr_dist) / init_dist  # Scale by initial distance
-    
-    # 4. Action Smoothness Penalty
-    action_diff = np.linalg.norm(actions - prev_actions) / 2.0  # Assuming actions ∈ [-1,1]
-    reward -= 0.8 * action_diff
-    
-    # 5. Solver Time Penalty (Normalized to 0.1s max)
-    reward -= 1.2 * (solve_time / 0.1)
-    
-    # --- Every 10 Steps ---
-    if step % 10 == 0:
-        # 7. Low Velocity Penalty (1s rolling average)
-        if np.mean(simdata[-10:, 5]) < 0.1:
-            reward -= 20
+    # Solver Time Penalty (Normalized to 0.1s max)
+    reward -= 1.2 * (observations[92] / 100)    # mpc time is in ms
+
+    #                 0       1         2         3     
+    # isdone list : [done, atTarget, collision, tooSlow] 
     
     # --- Terminal/Episodic Bonuses ---
-    if terminal_condition == "target_reached":
-        reward += 100 + 15 * gates_passed  # Base + gate bonus
+    if isdone[1]:
+        reward += 100 
+        reward =+ 15 * ep.epPassGates  # Base + gate bonus
+    
+    # Collision Penalty (Terminal)
+    if isdone[2]:
+        reward -= 100
+    if isdone[3]:
+        reward -= 60
     
     return reward
 
@@ -286,10 +306,6 @@ def getStepObservations(currentState,u,mpcTime,env):
     observations.extend(targetInfo)
     observations.append(mpcTime)
 
-    # observations = np.append(state.reshape((1,-1)),obsObsv.reshape((1,-1))) 
-    # observations = np.append(observations , targetInfo.reshape((1,-1)))
-    # observations = np.append(observations, mpcTime)
-    # print(observations.shape)
     return observations
 
 def normalise_observations(obs):
@@ -369,22 +385,28 @@ def obstacle_metrics(state, obstacle):
     angle = np.arctan2(dy, dx)
     return np.array([dist, np.sin(angle), np.cos(angle), obstacle[2]])
 
-def episodeTermination(observe):
+def episodeTermination(ep):
     done = atTarget = collision = tooSlow = False
     # Check if episode is complete
     # 1: Check for at target:
-    if observe[88] < 0.1:
+    if ep.latest_observation[88] < 0.1:
         atTarget = True
-
+        print("[Episode End] At Target")
     # 2: Check for collision
     for i in range(19):
-        if observe[8+i*4] <= 0.00 :
+        if ep.latest_observation[8+i*4] <= 0.00 :
             collision = True
+            print(f"[Episode End] Obstacle {i} CRASH!")
             break
 
+    # Check for Stuck
+    if not atTarget and len(ep.past_observations) == 5:
+        if np.mean([sublist[6] for sublist in ep.past_observations]) < 0.1:
+            tooSlow = True
+            print(f"[Episode End] Too Slow!")
     # Check for any termination event
     done = atTarget or collision or tooSlow
-    return done
+    return [done, atTarget, collision, tooSlow]
 
 if __name__ == "__main__":
     print("[START]")
@@ -400,16 +422,15 @@ if __name__ == "__main__":
         with open(file_path, 'rb') as f:
             env = pickle.load(f)
     # exit()
-    Nvalues = [10 , 30, 60 ,100] #np.arange(10,110,10)#[10, 20, 30, 40, 50]
+    Nvalues = [10,20,30,40,50,60,70,80,90,100] #np.arange(10,110,10)#[10, 20, 30, 40, 50]
     nmpc = NMPC_CBF_MULTI_N(0.1, Nvalues, nObs=5)
     print("NMPC_CBF_MULTI_N class initialized successfully.")
     
     # Set initial mpc parameters
-    nmpc.solversIdx = np.random.randint(0,len(Nvalues)) # random start solver index
+    nmpc.solversIdx = nmpc.normalActionsN(np.random.uniform(0,1)) # random start solver index
+    print(nmpc.solversIdx)
     nmpc.currentN = nmpc.nVals[nmpc.solversIdx]         # random start solver N
     obstacles = env['obstacles']                        # obstacle config from environment
-    
-    print(len(obstacles))
     obstacles = obstacles[0:5,:]
     targetPos = env['target_pos']                       # target position from environment
     nmpc.setObstacles(obstacles)
@@ -418,33 +439,52 @@ if __name__ == "__main__":
     currentPos = np.array([0,0,targetPos[2]])
     targetArea = np.append(targetPos,0.05)
     
-    cbf = np.tile(0.8,nmpc.nObs)#np.random.randint(1, 1000, size=(1, 20))/100 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< CBF VALUES
-    
+    # cbf = np.tile(5e-2,nmpc.nObs)
+    cbf = np.random.uniform(0,1, size=(1,nmpc.nObs))
+    # print(nmpc.normalActionsCBF(cbf))
+    # print(cbf)
+    # print(nmpc.currentN)
+    # print(nmpc.solversIdx)
+    # exit()
     ep = EpisodeTracker(allRecord=True)
     cnt=0
+    gateCheck = env["pass_targets"].copy()
+
     while not ep.done:
          
         newPos, u, mpcTime = simulateStep(currentPos, cbf)        
         observe = getStepObservations(newPos,u,mpcTime,env)     # get observations for next step
-        
-        # print(observe)
-        # print(len(observe))
         ep.add_observation(observe)                             # update observations for episode
         actions = cbf.tolist()
         actions.append(nmpc.currentN)
         ep.add_action(actions)
 
-        # print_observations(observe)
-        ep.done = episodeTermination(observe)
-        print(">>")
+        # check if pass target is hit
+        if len(gateCheck) > 0:
+            for i, gate in enumerate(gateCheck):
+                hitgate, _ = checkCollision(newPos, np.array(gate + [0.6]))
+                if hitgate: # if hit
+                    gateCheck.pop(i)
+                    ep.epPassGates =+ 1
+                    break
+
+        isdone = episodeTermination(ep)
+        ep.done = isdone[0]
+        reward = calculate_reward(ep,isdone)
+        print(reward)
         currentPos = newPos
-
-        if cnt % 500 == 0:
-            nmpc.adjustHorizon(np.random.randint(0,len(Nvalues)))
-
-
+        
+        # Switch horizon
+        cnt = cnt+1
+        if cnt % 30 == 0:
+            nmpc.adjustHorizon(np.random.uniform(0,1))
+            cbf = np.random.uniform(0,1, size=(1,nmpc.nObs))
+    
+    
+    
+    print(ep.epPassGates)
     plotSimdata(ep,env)
-    # ani = plotSimdataAnimated(epdata, targetPos, obstacles)
+    # ani = plotSimdataAnimated(ep,env)
     # startPos = simdata[-1,2:5]
     # simdata = simulateStep(10,startPos,obstacles)
     # plotSimdata(simdata,targetPos)

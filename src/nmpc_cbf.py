@@ -9,6 +9,7 @@ class NMPC_CBF_MULTI_N:
         
         self.dt = dt                                    # time step
         self.nVals = nVals                              # horizon length values for solvers
+        self.nrange = len(nVals)
         self.nObs = nObs                                # number of obstacles
         self.wStates = np.diag([5.0, 5.0, 0.1])         # Weight matrix for states
         self.wCtrls = np.diag([5.0, 1.0])               # Weight matrix for controls
@@ -32,6 +33,8 @@ class NMPC_CBF_MULTI_N:
         self.currentN = nVals[0]                        # Set the N horizon length of active solver
         self.stateHorizon = np.array([])                # Init empty array for state horizon
         self.ctrlHorizon = np.array([])                 # Init empty array for control horizon
+        self.minCBF = 0.001                              # Set minimum cbf value for normalised actions
+        self.maxCBF = 100                               # Set maximum cbf value for normalised actions
     
     def setup_controllers(self):
         for N in self.nVals:
@@ -170,7 +173,7 @@ class NMPC_CBF_MULTI_N:
         solver = self.solvers[self.solversIdx]
         # set the parameters
         solver["opt"].set_value(solver["stateNow"],  currentPos)
-        solver["opt"].set_value(solver["cbfParms"],  cbfParms  )
+        solver["opt"].set_value(solver["cbfParms"],  self.normalActionsCBF(cbfParms)  )
         # set the optimisation variables
         solver["opt"].set_initial(solver["stateHorizon"], self.stateHorizon)    # provide the initial guess of state for the next step
         solver["opt"].set_initial(solver["ctrlHorizon"], self.ctrlHorizon)            # provide the initial guess of control for the next step       
@@ -190,17 +193,54 @@ class NMPC_CBF_MULTI_N:
         self.stateHorizon = []
         return
     
-    def adjustHorizon(self,newIdx):
+    # def adjustHorizon(self,newIdx):
+    #     newN = self.nVals[newIdx]
+    #     if newN < self.currentN:
+    #         self.ctrlHorizon  = self.ctrlHorizon[0:newN  ,:]
+    #         self.stateHorizon = self.stateHorizon[0:newN+1,:]
+    #     else:
+    #         # addCtrl  = np.tile( self.ctrlHorizon[-1,:], (newN-self.currentN,1))
+    #         # addState = np.tile(self.stateHorizon[-1,:], (newN-self.currentN,1))
+    #         # self.ctrlHorizon  = np.vstack([self.ctrlHorizon, addCtrl])
+    #         # self.stateHorizon = np.vstack([self.stateHorizon, addState])
+    #         # Extrapolate using the last two states/controls
+    #         dx = self.stateHorizon[-1] - self.stateHorizon[-2]
+    #         addState = [self.stateHorizon[-1] + (i+1)*dx for i in range(newN - self.currentN)]
+    #         addCtrl = [self.ctrlHorizon[-1] for _ in range(newN - self.currentN)]
+    #         self.ctrlHorizon = np.vstack([self.ctrlHorizon, addCtrl])
+    #         self.stateHorizon = np.vstack([self.stateHorizon, addState])
+    #     self.currentN = newN
+    #     self.solversIdx = newIdx
+
+    def adjustHorizon(self, action):
+        newIdx = self.normalActionsN(action)
         newN = self.nVals[newIdx]
         if newN < self.currentN:
-            self.ctrlHorizon  = self.ctrlHorizon[0:newN  ,:]
-            self.stateHorizon = self.stateHorizon[0:newN+1,:]
-        else:
-            addCtrl  = np.tile( self.ctrlHorizon[-1,:], (newN-self.currentN,1))
-            addState = np.tile(self.stateHorizon[-1,:], (newN-self.currentN,1))
-            self.ctrlHorizon  = np.vstack([self.ctrlHorizon, addCtrl])
-            self.stateHorizon = np.vstack([self.stateHorizon, addState])
+            # Shrink horizon
+            self.ctrlHorizon = self.ctrlHorizon[0:newN, :]
+            self.stateHorizon = self.stateHorizon[0:newN+1, :]
+        elif newN > self.currentN:  # Changed from else to explicit check
+            # Expand horizon
+            dx = self.stateHorizon[-1] - self.stateHorizon[-2]
+            addState = [self.stateHorizon[-1] + (i+1)*dx 
+                    for i in range(newN - self.currentN)]
+            addCtrl = [self.ctrlHorizon[-1] 
+                    for _ in range(newN - self.currentN)]
+            
+            # Convert lists to arrays before vstack
+            self.ctrlHorizon = np.vstack([self.ctrlHorizon, np.array(addCtrl)])
+            self.stateHorizon = np.vstack([self.stateHorizon, np.array(addState)])
+        # No else needed - do nothing when newN == currentN
+        
         self.currentN = newN
         self.solversIdx = newIdx
+
+    def normalActionsCBF(self, actions):
+        cbf = actions * (self.maxCBF - self.minCBF) + self.minCBF
+        return cbf
+    
+    def normalActionsN(self, action):
+        Nindex = round(action * self.nrange)
+        return Nindex
 if __name__ =="__main__":
     print("NMPC-CBF Solver Class Definition")

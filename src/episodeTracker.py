@@ -12,6 +12,7 @@ class EpisodeTracker:
         self.done = False
         self.allRecord = allRecord
         self.epStep = 0
+        self.epPassGates = 0
 
     def add_observation(self, observation):
         """Updates observation history while maintaining 5-step window"""
