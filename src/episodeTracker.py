@@ -11,6 +11,7 @@ class EpisodeTracker:
         self.rewards = []
         self.done = False
         self.allRecord = allRecord
+        self.epStep = 0
 
     def add_observation(self, observation):
         """Updates observation history while maintaining 5-step window"""
@@ -22,6 +23,7 @@ class EpisodeTracker:
         self.latest_observation = observation
         if self.allRecord:
             self.all_observation(observation)
+        self.epStep =+ 1 # increment step counter
 
     def all_observation(self, observation):
         """Updates observation history for all observations"""

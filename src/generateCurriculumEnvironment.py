@@ -170,9 +170,9 @@ def genCurEnv_2(curriculum_level, gen_fig=False):
         gateOffset = 0.0
         nGates = 1
         obsRad = np.round(np.random.uniform(0.5,10.1),1)
-        gateGap = -obsRad*np.random.uniform(1.8, 2.2)
-        while abs(gateOffset)  < 0.1:
-            gateOffset = np.random.uniform(-(obsRad*0.95),(obsRad*0.95)) 
+        gateGap = -obsRad*np.random.uniform(1.8, 2.001)
+        while abs(gateOffset)  < 0.05:
+            gateOffset = np.random.uniform(-(obsRad*0.7),(obsRad*0.7)) 
         
     elif curriculum_level == 2:
         # two overlapping obstacles with concave trap
@@ -346,9 +346,10 @@ if __name__ == "__main__":
     # env = generate_curriculum_environment(2, gen_fig=True)
     # plt.show()
 
-    env = genCurEnv_2(curriculum_level=4 , gen_fig=True)
-    input("ENTER to save file")
-    # Save to file
-    with open('env4-1.pkl', 'wb') as f:
-        pickle.dump(env, f)
+    env = genCurEnv_2(curriculum_level=1 , gen_fig=True)
+    # input("ENTER to save file")
+    # # Save to file
+    # with open('env1-1.pkl', 'wb') as f:
+    #     pickle.dump(env, f)
+
 

@@ -105,7 +105,7 @@ def plotSimdataAnimated(simdata, target, obstacles):
     
     return ani  # Return animation object to prevent garbage collection
 
-def ep2simdata(epdata):
+def ep2simdata(ep):
     # Observations Vector (93)
     #                        0     1     2         3        4         5       6    7
     #   state (8)       : [x-pos y-pos sin(yaw) cos(yaw)  x-tgt-n   y-tgt-n   v    w ]
@@ -116,6 +116,8 @@ def ep2simdata(epdata):
     #                         92
     #   mpcTime  (1)    : [ mpcTime ]  
     #format epdata to simdata
+    epdata = ep.all_observations
+    acdata = ep.actions
     simdata = np.zeros((len(epdata),10))
     for i,row in enumerate(epdata):
         simdata[i,0] = i        # step number
@@ -127,15 +129,16 @@ def ep2simdata(epdata):
         simdata[i,6] = row[7]   # w
         simdata[i,7] = 1e5      # min obstacle separation
         for o,_ in enumerate(obstacles):
-            if row[88+o*4] < simdata[i,8]:
-                simdata[i,7] = row[88+o*4]
-        simdata[i,8] = 0 # not used
-        return simdata
+            if row[8+o*4] < simdata[i,7]:
+                simdata[i,7] = row[8+o*4]
+        simdata[i,8] = acdata[i][-1] # mpc horizon length
+    
+    return simdata
 
-def plotSimdata(epdata,env):
+def plotSimdata(ep,env):
 
-    simdata = ep2simdata(epdata)
-    obstacles = env['obstacles']
+    simdata = ep2simdata(ep)
+    ob = env['obstacles']
     target = env['target_pos']
     
     fig = plt.figure(figsize=(10, 6))
@@ -163,8 +166,8 @@ def plotSimdata(epdata,env):
     ax1.scatter(x, y,s=1)      # Plots y versus x as a line
     ax1.add_patch(Circle(simdata[-1,2:5], 0.55, color='black', alpha=0.9, label="vehicle"))
     ax1.add_patch(Circle(target[0:2], 0.2, color='green', alpha=0.9))
-    for i in range(obstacles.shape[0]):
-        ax1.add_patch(Circle( obstacles[i,0:2], obstacles[i,2], color='red')) 
+    for i in range(ob.shape[0]):
+        ax1.add_patch(Circle( ob[i,0:2], ob[i,2], color='red')) 
 
     ax2.plot(t,mpct, label="mpc_time")
     ax3.plot(t,s, label="min sep")
@@ -206,8 +209,10 @@ def checkCollision(vehiclePos, obstacle):
     collision = safe_sep <= 0.0 
     return collision, safe_sep
 
-def calculate_reward(step, prev_state, current_state, solve_time, actions, prev_actions,
-                     tpCnt, terminal_condition, init_dist, gates_passed):
+def calculate_reward(epLog):
+        
+        # step, prev_state, current_state, solve_time, actions, prev_actions,
+        #              tpCnt, terminal_condition, init_dist, gates_passed):
     # --- Every Step Components ---
     reward = 0
     
@@ -383,7 +388,7 @@ def episodeTermination(observe):
 
 if __name__ == "__main__":
     print("[START]")
-    random_env = True
+    random_env = False
     if random_env:
         # env = genenv(2, gen_fig=True)
         # plt.show()
@@ -391,7 +396,7 @@ if __name__ == "__main__":
         env = genenv2(curriculum_level=1,gen_fig=True)
         plt.show()
     else:
-        file_path = './env4-1.pkl'
+        file_path = './env1-1.pkl'
         with open(file_path, 'rb') as f:
             env = pickle.load(f)
     # exit()
@@ -413,7 +418,7 @@ if __name__ == "__main__":
     currentPos = np.array([0,0,targetPos[2]])
     targetArea = np.append(targetPos,0.05)
     
-    cbf = np.tile(0.1,nmpc.nObs)#np.random.randint(1, 1000, size=(1, 20))/100 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< CBF VALUES
+    cbf = np.tile(0.8,nmpc.nObs)#np.random.randint(1, 1000, size=(1, 20))/100 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< CBF VALUES
     
     ep = EpisodeTracker(allRecord=True)
     cnt=0
@@ -422,20 +427,23 @@ if __name__ == "__main__":
         newPos, u, mpcTime = simulateStep(currentPos, cbf)        
         observe = getStepObservations(newPos,u,mpcTime,env)     # get observations for next step
         
-        print(observe)
-        print(len(observe))
+        # print(observe)
+        # print(len(observe))
         ep.add_observation(observe)                             # update observations for episode
-        print_observations(observe)
+        actions = cbf.tolist()
+        actions.append(nmpc.currentN)
+        ep.add_action(actions)
+
+        # print_observations(observe)
         ep.done = episodeTermination(observe)
         print(">>")
         currentPos = newPos
 
-        cnt+=1
-        if cnt == 100:
-            ep.done = True
+        if cnt % 500 == 0:
+            nmpc.adjustHorizon(np.random.randint(0,len(Nvalues)))
 
 
-    plotSimdata(ep.all_observations,targetPos)
+    plotSimdata(ep,env)
     # ani = plotSimdataAnimated(epdata, targetPos, obstacles)
     # startPos = simdata[-1,2:5]
     # simdata = simulateStep(10,startPos,obstacles)
