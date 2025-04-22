@@ -6,11 +6,13 @@ from generateCurriculumEnvironment import MapLimits
 import time
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
-from nmpc_cbf import NMPC_CBF_MULTI_N
 from matplotlib.animation import FuncAnimation
 import tkinter as tk
 from tkinter import filedialog
 import pickle
+
+from nmpc_cbf import NMPC_CBF_MULTI_N
+from episodeTracker import EpisodeTracker
 
 np.set_printoptions(precision=3, suppress=True)
 
@@ -103,8 +105,39 @@ def plotSimdataAnimated(simdata, target, obstacles):
     
     return ani  # Return animation object to prevent garbage collection
 
+def ep2simdata(epdata):
+    # Observations Vector (93)
+    #                        0     1     2         3        4         5       6    7
+    #   state (8)       : [x-pos y-pos sin(yaw) cos(yaw)  x-tgt-n   y-tgt-n   v    w ]
+    #                       8+o      9+o        10+o      11+o    (o =obsIndex*4)
+    #   obsObv (80)     : [dist, sin(angle), cos(angle), radius]
+    #                         88    89           90          91
+    #   targetInfo (4)  : [ dist, sin(angle), cos(angle) progress]
+    #                         92
+    #   mpcTime  (1)    : [ mpcTime ]  
+    #format epdata to simdata
+    simdata = np.zeros((len(epdata),10))
+    for i,row in enumerate(epdata):
+        simdata[i,0] = i        # step number
+        simdata[i,1] = row[92]  # mpc time
+        simdata[i,2] = row[0]   # x position
+        simdata[i,3] = row[1]   # y position
+        simdata[i,4] = np.arcsin(row[2])    # yaw
+        simdata[i,5] = row[6]   # v
+        simdata[i,6] = row[7]   # w
+        simdata[i,7] = 1e5      # min obstacle separation
+        for o,_ in enumerate(obstacles):
+            if row[88+o*4] < simdata[i,8]:
+                simdata[i,7] = row[88+o*4]
+        simdata[i,8] = 0 # not used
+        return simdata
 
-def plotSimdata(simdata,target):
+def plotSimdata(epdata,env):
+
+    simdata = ep2simdata(epdata)
+    obstacles = env['obstacles']
+    target = env['target_pos']
+    
     fig = plt.figure(figsize=(10, 6))
     
     ax1 = plt.subplot2grid((2, 6), (0, 0), rowspan=2, colspan=2)    # ax1: left, spanning 2 rows and 2 columns  
@@ -166,19 +199,6 @@ def simulateStep(startState,cbf):
     currentPos = nmpc.stateHorizon[1,:]
     mpcTime = time.time() - t
     return currentPos, u, mpcTime         
-    
-    # collision = False
-    # sep = 1000.0
-    # for obs in obstacles:
-    #     c, s = checkCollision(currentPos,obs)
-    #     collision = collision and c
-    #     if s < sep:
-    #         sep = s
-    # simdata[i,7] = sep
-    # simdata[i,8] = nmpc.currentN
-    # if collision:
-    #     print("CRASH!")
-    #     break
 
 def checkCollision(vehiclePos, obstacle):
     cen_sep = np.linalg.norm(vehiclePos[0:2] - obstacle[0:2])
@@ -225,21 +245,46 @@ def calculate_reward(step, prev_state, current_state, solve_time, actions, prev_
 
 
 def getStepObservations(currentState,u,mpcTime,env):
-    state = currentState                                                
-    state = np.append(state, [0.0, np.sin(state[2]), np.cos(state[2]), u ])     #<<<<<<<<<<<<<<< START WITH ERROR HERE >>>>>>>>>>>>>>>>>>                 
-    state[2] = np.max([0, np.min([1,(targetPos[0]-state[0])/np.max([0.0001,targetPos[0]])])]) # scaled to target normalised x
-    state[3] = np.max([0, np.min([1,(targetPos[1]-state[1])/np.max([0.0001,targetPos[1]])])]) # scaled to target normalised y
-    obsObsv =np.empty((0,4))
+    # Observations Vector (93)
+    #                        0     1     2         3        4         5       6    7
+    #   state (8)       : [x-pos y-pos sin(yaw) cos(yaw)  x-tgt-n   y-tgt-n   v    w ]
+    #                       8+o      9+o        10+o      11+o    (o =obsIndex*4)
+    #   obsObv (80)     : [dist, sin(angle), cos(angle), radius]
+    #                         88    89           90          91
+    #   targetInfo (4)  : [ dist, sin(angle), cos(angle) progress]
+    #                         92
+    #   mpcTime  (1)    : [ mpcTime ]  
+    targetPos = env['target_pos']
+    obstacles = env['obstacles']
+    state = currentState.tolist()
+    state.extend([0.0, np.sin(state[2]), np.cos(state[2])])
+    state.extend(u.tolist())
+    # state[2] = np.max([0, np.min([1,(targetPos[0]-state[0])/np.max([0.0001,targetPos[0]])])]) # scaled to target normalised x
+    state[2] = max(0, min(1, (targetPos[0] - state[0]) / max(0.0001, targetPos[0])))
+    # state[3] = np.max([0, np.min([1,(targetPos[1]-state[1])/np.max([0.0001,targetPos[1]])])]) # scaled to target normalised y
+    state[3] = max(0, min(1, (targetPos[1] - state[1]) / max(0.0001, targetPos[1])))
+
+    obsObsv =[]
     for o in obstacles:
-        obsObsv = np.append(obsObsv,obstacle_metrics(state[0:2], o))
-    targetInfo = obstacle_metrics(state[0:2],np.append(targetPos, 0.1))   # target area [distance sin() cos() radii]
-    targetInfo[3] = np.max((0.00, env["startDist"] - targetInfo[0] )) / env["startDist"]    # replace targetInfo radii with progress %
-    observations = np.hstack([  state.reshape((1,-1)), obsObsv.reshape((1,-1)), targetInfo.reshape((1,-1)) , mpcTime ])
-    # print_observations(observations)
+        obs_metrics = obstacle_metrics(state[0:2], o)
+        obsObsv.extend(obs_metrics.tolist())
+        # obsObsv = np.append(obsObsv,obstacle_metrics(state[0:2], o))
+
+    targetInfo = obstacle_metrics(state[0:2], np.append(targetPos, 0.1)).tolist()
+    # targetInfo = obstacle_metrics(state[0:2],np.append(targetPos, 0.1))                     # target area [distance sin() cos() radii]
+    targetInfo[3] = max(0.00, env["startDist"] - targetInfo[0]) / env["startDist"]
+    # targetInfo[3] = np.max((0.00, env["startDist"] - targetInfo[0] )) / env["startDist"]    # replace targetInfo radii with progress %
+    
+    observations = []
+    observations.extend(state)
+    observations.extend(obsObsv)
+    observations.extend(targetInfo)
+    observations.append(mpcTime)
+
+    # observations = np.append(state.reshape((1,-1)),obsObsv.reshape((1,-1))) 
+    # observations = np.append(observations , targetInfo.reshape((1,-1)))
+    # observations = np.append(observations, mpcTime)
     # print(observations.shape)
-    # normalised_observations = normalise_observations(observations)
-    # print_observations(normalised_observations)
-    # exit()
     return observations
 
 def normalise_observations(obs):
@@ -286,14 +331,19 @@ def normalise_observations(obs):
 
 
 def print_observations(obs):
-    obs = obs.flatten()
-    # n_fixed = 4
-    # n_metrics = 4
-    # n_target = 3
-    # n_perf = 8
+    # Observations Vector (93)
+    #                        0     1     2         3        4         5       6    7
+    #   state (8)       : [x-pos y-pos sin(yaw) cos(yaw)  x-tgt-n   y-tgt-n   v    w ]
+    #                       8+o      9+o        10+o      11+o    (o =obsIndex*4)
+    #   obsObv (80)     : [dist, sin(angle), cos(angle), radius]
+    #                         88    89           90          91
+    #   targetInfo (4)  : [ dist, sin(angle), cos(angle) progress]
+    #                         92
+    #   mpcTime  (1)    : [ mpcTime ]  
+    # obs = obs.flatten()
 
     full_labels = [
-        "Current X", "Current Y", "sin(yaw)", "cos(yaw)", "X/x-target", "Y/y-target"
+        "Current X", "Current Y", "sin(yaw)", "cos(yaw)", "X/x-target", "Y/y-target", "Velocity(v)", "Steering(w)"
     ]
     for i in range(nmpc.nObs):
         full_labels += [
@@ -301,9 +351,8 @@ def print_observations(obs):
             f"Obstacle {i+1} cos(θ)", f"Obstacle {i+1} radius"
         ]
     full_labels += [
-        "Target Clearance", "Target sin(θ)", "Target cos(θ)",
-        "Average Speed", "Max Speed", "Average Angular Rate", "Max Angular Rate",
-        "Average MPC Time", "Max MPC Time", "Targets Hit", "Target Progress"
+        "Target Distance", "Target sin(θ)", "Target cos(θ)", "Target Progress %",
+        "MPC Time"
     ]
 
     for l, v in zip(full_labels, obs):
@@ -314,6 +363,23 @@ def obstacle_metrics(state, obstacle):
     dist = np.hypot(dx, dy) - (nmpc.vehRad + obstacle[2])
     angle = np.arctan2(dy, dx)
     return np.array([dist, np.sin(angle), np.cos(angle), obstacle[2]])
+
+def episodeTermination(observe):
+    done = atTarget = collision = tooSlow = False
+    # Check if episode is complete
+    # 1: Check for at target:
+    if observe[88] < 0.1:
+        atTarget = True
+
+    # 2: Check for collision
+    for i in range(19):
+        if observe[8+i*4] <= 0.00 :
+            collision = True
+            break
+
+    # Check for any termination event
+    done = atTarget or collision or tooSlow
+    return done
 
 if __name__ == "__main__":
     print("[START]")
@@ -330,13 +396,16 @@ if __name__ == "__main__":
             env = pickle.load(f)
     # exit()
     Nvalues = [10 , 30, 60 ,100] #np.arange(10,110,10)#[10, 20, 30, 40, 50]
-    nmpc = NMPC_CBF_MULTI_N(0.1, Nvalues, 20)
+    nmpc = NMPC_CBF_MULTI_N(0.1, Nvalues, nObs=5)
     print("NMPC_CBF_MULTI_N class initialized successfully.")
     
     # Set initial mpc parameters
     nmpc.solversIdx = np.random.randint(0,len(Nvalues)) # random start solver index
     nmpc.currentN = nmpc.nVals[nmpc.solversIdx]         # random start solver N
     obstacles = env['obstacles']                        # obstacle config from environment
+    
+    print(len(obstacles))
+    obstacles = obstacles[0:5,:]
     targetPos = env['target_pos']                       # target position from environment
     nmpc.setObstacles(obstacles)
     nmpc.setTarget(targetPos)
@@ -346,34 +415,28 @@ if __name__ == "__main__":
     
     cbf = np.tile(0.1,nmpc.nObs)#np.random.randint(1, 1000, size=(1, 20))/100 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< CBF VALUES
     
-    episodeDone = False
-    while not episodeDone:
+    ep = EpisodeTracker(allRecord=True)
+    cnt=0
+    while not ep.done:
          
-        newPos, u, mpcTime = simulateStep(currentPos, cbf)
+        newPos, u, mpcTime = simulateStep(currentPos, cbf)        
+        observe = getStepObservations(newPos,u,mpcTime,env)     # get observations for next step
         
-        # get observations for next step
-        x = getStepObservations(newPos,u,mpcTime,env)
-        print(x)
-        exit()
-        
-        startPos = simdata[-1,2:5]
-        runtime += epStepTime
-        if runtime == epStepTime:
-            epdata = simdata
-        else:
-            epdata = np.vstack([epdata,simdata[1:,:]])
+        print(observe)
+        print(len(observe))
+        ep.add_observation(observe)                             # update observations for episode
+        print_observations(observe)
+        ep.done = episodeTermination(observe)
         print(">>")
-        fin, _ = checkCollision(startPos,targetArea)
-        if fin:
-            print("At Target")
-            break
-        else:
-            nmpc.adjustHorizon(np.random.randint(0,len(Nvalues)) ) 
+        currentPos = newPos
 
-    epdata[:,0] = np.arange(epdata.shape[0])
+        cnt+=1
+        if cnt == 100:
+            ep.done = True
 
-    # plotSimdata(epdata,targetPos)
-    ani = plotSimdataAnimated(epdata, targetPos, obstacles)
+
+    plotSimdata(ep.all_observations,targetPos)
+    # ani = plotSimdataAnimated(epdata, targetPos, obstacles)
     # startPos = simdata[-1,2:5]
     # simdata = simulateStep(10,startPos,obstacles)
     # plotSimdata(simdata,targetPos)
