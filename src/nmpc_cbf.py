@@ -51,12 +51,6 @@ class NMPC_CBF_MULTI_N:
 
         # kinematic model definition f
         solver["f"] = lambda x_, u_: ca.vertcat(*[ca.cos(x_[2])*u_[0], ca.sin(x_[2])*u_[0], u_[1]])
-        # # Define the ODE function
-        # x = ca.MX.sym('x', 3)
-        # u = ca.MX.sym('u', 2)
-        # ode = solver["f"](x, u)
-        # dae = {'x': x, 'p': u, 'ode': ode}  #       t0   dt         opts
-        # integrator = ca.integrator('F', 'cvodes', dae, 0, self.dt)
 
         # parameters to be passsed at solve time
         solver["stateNow"]  = solver["opt"].parameter(1, 3)
@@ -85,34 +79,6 @@ class NMPC_CBF_MULTI_N:
             stateErr = st - solver["stateTgt"]
             costFunction = costFunction + ca.mtimes([stateErr, self.wStates, stateErr.T]) + ca.mtimes([ct, self.wCtrls, ct.T])
         solver["opt"].minimize(costFunction)
-
-        # #  CBF for obstacles (looped)
-        # for i in range(N):
-        #     # st      = ca.repmat(solver["stateHorizon"][i  ,0:2],self.nObs,1)    # current state xy position
-        #     # st_next = ca.repmat(solver["stateHorizon"][i+1,0:2],self.nObs,1)    # next state xy position
-        #     # voRads = solver["obstacles"][:, 2] + self.vehRad
-        #     # h      = ca.sqrt( ca.sum2((     st - solver["obstacles"][:, 0:2])**2) ) - voRads
-        #     # h_next = ca.sqrt( ca.sum2((st_next - solver["obstacles"][:, 0:2])**2) ) - voRads
-        #     # # Apply constraints for all obstacles at horizon step i
-        #     # solver["opt"].subject_to(h_next - (1 - solver["cbfParms"]) * h >= 0)
-        #     for j in range(self.nObs):            
-        #         st = solver["stateHorizon"][i,:]
-        #         st_next = solver["stateHorizon"][i+1,:]
-        #         # relax cbf
-        #         # h      = (st[0]     -solver["obstacles"][j,0])**2 + (     st[1]-solver["obstacles"][j,1])**2-(self.vehRad + solver["obstacles"][j,2])**2
-        #         # h_next = (st_next[0]-solver["obstacles"][j,0])**2 + (st_next[1]-solver["obstacles"][j,1])**2-(self.vehRad + solver["obstacles"][j,2])**2
-        #         # solver["opt"].subject_to(h_next-(1-solver["cbfParms"][j])*h >= 0) # relaxed cbf
-                
-        #         # ecbf
-        #         #  for circular obstacle a = (obs_rad+veh_rad)^-2
-        #         #  safety function h : a(x_veh - x_obs)^2 + a(y_veh - y_obs)^2 -1 >= 0
-        #         #               lfh  : 2a(x_veh  -x_obs)X_dot + 2a(y_veh - y_obs)
-        #         #       ecbf : lfh + k*h >=0
-        #         obs =solver["obstacles"][j,:] 
-        #         a = (obs[2] + self.vehRad)**-2
-        #         h = a*(st[0]-obs[0])**2 + a*(st[1]-obs[1])**2 - 1
-        #         lfh = 2*a*(st[0]-obs[0])*( (st_next[0]-st[0])/self.dt) + 2*a*(st[1]-obs[1])*( (st_next[1]-st[1])/self.dt)
-        #         solver["opt"].subject_to( lfh + solver["cbfParms"][j]*h >= 0)
 
         # CBF for obstacles (vectorised)
         for i in range(N):
@@ -188,9 +154,24 @@ class NMPC_CBF_MULTI_N:
         self.stateHorizon = np.vstack([solStateHorizon[1:], solStateHorizon[-1:]])
         return newCtrlHorizon[0,:]
 
-    def reset_nmpc(self):           # Reset the NMPC for the next episode
-        self.ctrlHorizon = []           # empty horizon arrays
-        self.stateHorizon = []
+    def reset_nmpc(self,target):           # Reset the NMPC for the next episode
+        # Warm start the state solutions, extending at full velocity towards target
+        dx = self.max_v * np.array([np.cos(target[2]), np.sin(target[2])])
+        steps = np.arange(1, self.currentN+1)[:, None]  # [1,2,...,10] as column vector
+        new_xy = steps * dx                      # Cumulative increments (10,2)
+        new_rows = np.hstack((new_xy, np.full((self.currentN, 1), target[2])))
+        self.stateHorizon = np.vstack((np.array([[0.0, 0.0, target[2]]]), new_rows))
+
+        # Warm start control horizon, start max v, zero w
+        self.ctrlHorizon = np.column_stack((np.ones(self.currentN), np.zeros(self.currentN)))
+
+        # addState = [self.stateHorizon[-1] + (i+1)*dx 
+        #         for i in range(newN - self.currentN)]
+        # # addCtrl = [self.ctrlHorizon[-1] 
+        # #         for _ in range(newN - self.currentN)]
+        
+        # self.ctrlHorizon = []           # empty horizon arrays
+        # self.stateHorizon = []
         return
     
     # def adjustHorizon(self,newIdx):

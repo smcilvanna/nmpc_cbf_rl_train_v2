@@ -1,14 +1,14 @@
 
+# from generateCurriculumEnvironment import generate_curriculum_environment as genenv
+# from generateCurriculumEnvironment import MapLimits
+# from tkinter import filedialog
+# import tkinter as tk
 import numpy as np
-from generateCurriculumEnvironment import generate_curriculum_environment as genenv
 from generateCurriculumEnvironment import genCurEnv_2 as genenv2
-from generateCurriculumEnvironment import MapLimits
 import time
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.animation import FuncAnimation
-import tkinter as tk
-from tkinter import filedialog
 import pickle
 
 from nmpc_cbf import NMPC_CBF_MULTI_N
@@ -230,39 +230,43 @@ def calculate_reward(ep,isdone):
     reward = 0
     # Velocity Maintenance (Gaussian around 0.8 m/s)
     velocity = observations[6]
-    reward += 1.0 * np.exp(-2 * (velocity - 1.0)**2)
+    rv = 1.0 * np.exp(-2 * (velocity - 1.0)**2)
+    
     
     # Progress (Normalized Δ distance)
+    rp=0
     if len(ep.past_observations) > 1:
         prev_dist = ep.past_observations[-1][88]
         curr_dist = ep.latest_observation[88]
-        reward += 2.5 * (prev_dist - curr_dist)  # Scale by initial distance
+        rp = 2.5 * (prev_dist - curr_dist)  # Scale by initial distance
     
     # Action Smoothness Penalty
+    ra = 0
     if len(ep.actions) > 1:
         current_actions = ep.actions[-1]
         prev_actions = ep.actions[-2]
-
-        print(current_actions)
-        print(prev_actions)
-
-        action_diff = np.linalg.norm(current_actions - prev_actions) / 2.0  # Assuming actions ∈ [-1,1]
-        reward -= 0.8 * action_diff
+        cbf_diff = np.linalg.norm(np.array(current_actions[0:-1]) - np.array(prev_actions[0:-1])) / 2.0  # this is wrong , cbf actions will be in [0 1] range
+        n_diff = np.linalg.norm(current_actions[-1] - prev_actions[-1]) / 2.0 # this is wrong , N action will be in [0 1] range
+        ra = -0.8 * cbf_diff + n_diff 
     
     # Solver Time Penalty (Normalized to 0.1s max)
-    reward -= 1.2 * (observations[92] / 100)    # mpc time is in ms
+    rt = -1.2 * (observations[92] / 100)    # mpc time is in ms, not sure this is correct
 
+    reward = rv + rp + ra + rt
+    
     #                 0       1         2         3     
     # isdone list : [done, atTarget, collision, tooSlow] 
     
     # --- Terminal/Episodic Bonuses ---
     if isdone[1]:
         reward += 100 
-        reward =+ 15 * ep.epPassGates  # Base + gate bonus
+        reward =+ 15 * ep.epPassGates  # Bonus for navigating close to obstacle
     
     # Collision Penalty (Terminal)
     if isdone[2]:
         reward -= 100
+
+    # Deadlock Penalty (Terminal)
     if isdone[3]:
         reward -= 60
     
@@ -423,15 +427,16 @@ if __name__ == "__main__":
             env = pickle.load(f)
     # exit()
     Nvalues = [10,20,30,40,50,60,70,80,90,100] #np.arange(10,110,10)#[10, 20, 30, 40, 50]
-    nmpc = NMPC_CBF_MULTI_N(0.1, Nvalues, nObs=5)
+    nmpc = NMPC_CBF_MULTI_N(0.1, Nvalues, nObs=1)
     print("NMPC_CBF_MULTI_N class initialized successfully.")
     
     # Set initial mpc parameters
-    nmpc.solversIdx = nmpc.normalActionsN(np.random.uniform(0,1)) # random start solver index
+    # nmpc.solversIdx = nmpc.normalActionsN(np.random.uniform(0,1)) # random start solver index
+    nmpc.solversIdx = 1
     print(nmpc.solversIdx)
     nmpc.currentN = nmpc.nVals[nmpc.solversIdx]         # random start solver N
     obstacles = env['obstacles']                        # obstacle config from environment
-    obstacles = obstacles[0:5,:]
+    obstacles = obstacles[0:nmpc.nObs,:]
     targetPos = env['target_pos']                       # target position from environment
     nmpc.setObstacles(obstacles)
     nmpc.setTarget(targetPos)
@@ -440,22 +445,18 @@ if __name__ == "__main__":
     targetArea = np.append(targetPos,0.05)
     
     # cbf = np.tile(5e-2,nmpc.nObs)
-    cbf = np.random.uniform(0,1, size=(1,nmpc.nObs))
-    # print(nmpc.normalActionsCBF(cbf))
-    # print(cbf)
-    # print(nmpc.currentN)
-    # print(nmpc.solversIdx)
-    # exit()
+    # cbf = np.random.uniform(0,1, size=(1,nmpc.nObs))
+    cbf = np.ones((1,nmpc.nObs))*0.001
     ep = EpisodeTracker(allRecord=True)
     cnt=0
     gateCheck = env["pass_targets"].copy()
-
+    totalReward = 0
     while not ep.done:
          
         newPos, u, mpcTime = simulateStep(currentPos, cbf)        
         observe = getStepObservations(newPos,u,mpcTime,env)     # get observations for next step
         ep.add_observation(observe)                             # update observations for episode
-        actions = cbf.tolist()
+        actions = cbf.flatten().tolist()
         actions.append(nmpc.currentN)
         ep.add_action(actions)
 
@@ -471,18 +472,19 @@ if __name__ == "__main__":
         isdone = episodeTermination(ep)
         ep.done = isdone[0]
         reward = calculate_reward(ep,isdone)
+        totalReward += reward
         print(reward)
         currentPos = newPos
         
         # Switch horizon
         cnt = cnt+1
         if cnt % 30 == 0:
-            nmpc.adjustHorizon(np.random.uniform(0,1))
-            cbf = np.random.uniform(0,1, size=(1,nmpc.nObs))
+            continue
+            # nmpc.adjustHorizon(np.random.uniform(0,1))
+            # cbf = np.random.uniform(0,1, size=(1,nmpc.nObs))
     
-    
-    
-    print(ep.epPassGates)
+    print("Total Reward : ", totalReward)
+    # print(ep.epPassGates)
     plotSimdata(ep,env)
     # ani = plotSimdataAnimated(ep,env)
     # startPos = simdata[-1,2:5]
