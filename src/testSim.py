@@ -145,7 +145,9 @@ def plotSimdata(ep,env):
     simdata = ep2simdata(ep)
     ob = env['obstacles']
     target = env['target_pos']
-    
+    rewards = ep.rewards[:-1]
+    finalReward = ep.rewards[-1]
+   
     fig = plt.figure(figsize=(10, 6))
     
     ax1 = plt.subplot2grid((2, 6), (0, 0), rowspan=2, colspan=2)    # ax1: left, spanning 2 rows and 2 columns  
@@ -197,14 +199,19 @@ def plotSimdata(ep,env):
     ax4.set_ylabel('Velocity Controls')
     ax5.set_xlabel('Simulation Step')
     ax5.set_ylabel('Solver Horizon')
-
     plt.tight_layout()
+
+    plt.figure(2)
+    plt.plot(t[1:],rewards)
+    plt.xlabel("Simulation Step")
+    plt.ylabel("Reward")
+
     plt.show()
 
 def simulateStep(startState,cbf):
     t = time.time()
     u = nmpc.solve(startState,cbf)
-    currentPos = nmpc.stateHorizon[1,:]
+    currentPos = nmpc.stateHorizon[0,:]
     mpcTime = time.time() - t
     return currentPos, u, mpcTime         
 
@@ -227,48 +234,65 @@ def calculate_reward(ep,isdone):
     observations = ep.latest_observation    
     
     # --- Every Step Components ---
-    reward = 0
-    # Velocity Maintenance (Gaussian around 0.8 m/s)
+    # Velocity Maintenance (Gaussian around 1 m/s)
     velocity = observations[6]
-    rv = 1.0 * np.exp(-2 * (velocity - 1.0)**2)
+    rv = 1.0 * np.exp(-2 * (velocity - 1.0)**2)         # >>> Reward interval [0 1]
     
-    
-    # Progress (Normalized Δ distance)
+    # Progress : At 1m/s max velocity maximum progress would be 0.1m per 0.1s timestep
+    # negative progress is not penalised
     rp=0
-    if len(ep.past_observations) > 1:
+    if len(ep.past_observations) >= 1:
         prev_dist = ep.past_observations[-1][88]
         curr_dist = ep.latest_observation[88]
-        rp = 2.5 * (prev_dist - curr_dist)  # Scale by initial distance
+        rp = np.tanh(10*(max(prev_dist - curr_dist,0))) ## >>> Reward interval [0 1]
     
     # Action Smoothness Penalty
-    ra = 0
-    if len(ep.actions) > 1:
-        current_actions = ep.actions[-1]
-        prev_actions = ep.actions[-2]
-        cbf_diff = np.linalg.norm(np.array(current_actions[0:-1]) - np.array(prev_actions[0:-1])) / 2.0  # this is wrong , cbf actions will be in [0 1] range
-        n_diff = np.linalg.norm(current_actions[-1] - prev_actions[-1]) / 2.0 # this is wrong , N action will be in [0 1] range
-        ra = -0.8 * cbf_diff + n_diff 
-    
-    # Solver Time Penalty (Normalized to 0.1s max)
-    rt = -1.2 * (observations[92] / 100)    # mpc time is in ms, not sure this is correct
+    # CBF actions are the first elements in the action array, up to the number of obstacles
+    # N action is always the last element in the action array
+    # All actions are normalised in range [0 1]
+    # Maximum reward for minimal change in action, decaying to zero for large changes
+    if len(ep.actions) >= 2:
+        current_actions = np.array(ep.actions[-1])
+        prev_actions = np.array(ep.actions[-2])
+        # cbf_diff = np.linalg.norm(np.array(current_actions[0:-1]) - np.array(prev_actions[0:-1])) / 2.0  # this is wrong , cbf actions will be in [0 1] range
+        # n_diff = np.linalg.norm(current_actions[-1] - prev_actions[-1]) / 2.0 # this is wrong , N action will be in [0 1] range
+        # cbf_diff = np.abs(np.array(current_actions[0:-1]) - np.array(prev_actions[0:-1]))
+        cbf_diff = np.linalg.norm(current_actions[0:-1] - prev_actions[0:-1])  # L2 norm                        
+        ra = np.exp(-5 * cbf_diff**2)                                       # Reward interval [0 1]
+        # not punishing mpc changes as this is reflected in mpc time
+        # n_ra = np.exp(-7 * (abs(current_actions[-1]-prev_actions[-1]))**2)  # Reward interval [0 1]
+        # ra = (0.8*cbf_ra + 0.2*n_ra)                                        # Total action reward interval [0 1]
+    else:
+        ra = 1
+    # Solver Time, want to encourage solver time < 100ms
+    mpctime = observations[92]
+    tt = 0.090  
+    if mpctime < tt:
+        rt = 1.0                                    # mpc time below threshold (50ms) full reward
+    else:                                           # anything above 50ms decayed reward, almost zero beyond 150ms
+        rt = np.exp(-3 * ((mpctime - tt)/0.1)**2)   # Reward interval [0 1]
 
-    reward = rv + rp + ra + rt
+    # reward intervals    [0 1]     [0 1]     [0 1]     [0 1]
+    
+    reward      =        0.2*rv   +    0.2*rp    +   0.2*ra    +   0.4*rt   # total step reward
+    
+    reward = reward/4   # Step reward interval [0 1]
     
     #                 0       1         2         3     
     # isdone list : [done, atTarget, collision, tooSlow] 
     
     # --- Terminal/Episodic Bonuses ---
     if isdone[1]:
-        reward += 100 
-        reward =+ 15 * ep.epPassGates  # Bonus for navigating close to obstacle
+        reward += 200 
+        reward += 20 * ep.epPassGates  # Bonus for navigating close to obstacle
     
     # Collision Penalty (Terminal)
     if isdone[2]:
-        reward -= 100
+        reward -= 250
 
     # Deadlock Penalty (Terminal)
     if isdone[3]:
-        reward -= 60
+        reward -= 150
     
     return reward
 
@@ -414,7 +438,7 @@ def episodeTermination(ep):
 
 if __name__ == "__main__":
     print("[START]")
-    random_env = False
+    random_env = True
     if random_env:
         # env = genenv(2, gen_fig=True)
         # plt.show()
@@ -426,8 +450,9 @@ if __name__ == "__main__":
         with open(file_path, 'rb') as f:
             env = pickle.load(f)
     # exit()
-    Nvalues = [10,20,30,40,50,60,70,80,90,100] #np.arange(10,110,10)#[10, 20, 30, 40, 50]
-    nmpc = NMPC_CBF_MULTI_N(0.1, Nvalues, nObs=1)
+    # Nvalues = [10,20,30,40,50,60,70,80,90,100] #np.arange(10,110,10)#[10, 20, 30, 40, 50]
+    Nvalues = [10 , 20]
+    nmpc = NMPC_CBF_MULTI_N(0.1, Nvalues, nObs=20)
     print("NMPC_CBF_MULTI_N class initialized successfully.")
     
     # Set initial mpc parameters
@@ -446,11 +471,16 @@ if __name__ == "__main__":
     
     # cbf = np.tile(5e-2,nmpc.nObs)
     # cbf = np.random.uniform(0,1, size=(1,nmpc.nObs))
-    cbf = np.ones((1,nmpc.nObs))*0.001
+    cbf = np.ones((1,nmpc.nObs))*0.01
+    print(nmpc.normalActionsCBF(cbf))
     ep = EpisodeTracker(allRecord=True)
     cnt=0
     gateCheck = env["pass_targets"].copy()
     totalReward = 0
+    maxSimTime = env["startDist"]*2
+    maxSimSteps = int(maxSimTime / nmpc.dt)
+    sd = env["startDist"]
+    input(f"Start Target Distance : {sd:.2f} m\nMaximum Sim Time : {maxSimTime:.1f} seconds\nMax Episode Steps : {maxSimSteps} ")
     while not ep.done:
          
         newPos, u, mpcTime = simulateStep(currentPos, cbf)        
@@ -471,20 +501,23 @@ if __name__ == "__main__":
 
         isdone = episodeTermination(ep)
         ep.done = isdone[0]
-        reward = calculate_reward(ep,isdone)
-        totalReward += reward
-        print(reward)
+        ep.add_reward(calculate_reward(ep,isdone))
+        
+        # advance for next step
         currentPos = newPos
         
         # Switch horizon
+        print(cnt)
         cnt = cnt+1
-        if cnt % 30 == 0:
-            continue
+        if cnt % 20 == 0:
             # nmpc.adjustHorizon(np.random.uniform(0,1))
             # cbf = np.random.uniform(0,1, size=(1,nmpc.nObs))
+            continue
+        if cnt > maxSimSteps:
+            print("EPISODE TIMEOUT")
+            ep.done = True
     
-    print("Total Reward : ", totalReward)
-    # print(ep.epPassGates)
+
     plotSimdata(ep,env)
     # ani = plotSimdataAnimated(ep,env)
     # startPos = simdata[-1,2:5]
