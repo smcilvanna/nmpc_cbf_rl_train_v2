@@ -34,7 +34,7 @@ class NMPC_CBF_MULTI_N:
         self.stateHorizon = np.array([])                # Init empty array for state horizon
         self.ctrlHorizon = np.array([])                 # Init empty array for control horizon
         self.minCBF = 0.001                              # Set minimum cbf value for normalised actions
-        self.maxCBF = 100                               # Set maximum cbf value for normalised actions
+        self.maxCBF = 5                               # Set maximum cbf value for normalised actions
     
     def setup_controllers(self):
         for N in self.nVals:
@@ -222,6 +222,7 @@ class NMPC_CBF_MULTI_N:
     
     def normalActionsN(self, action):
         Nindex = round(action * self.nrange)
+        Nindex = np.clip(Nindex,0,self.nrange-1)
         return Nindex
 if __name__ =="__main__":
     print("NMPC-CBF Solver Class Definition")
