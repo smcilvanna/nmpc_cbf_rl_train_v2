@@ -2,6 +2,12 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 
+from generateCurriculumEnvironment import genCurEnv_2 as genenv2
+from nmpc_cbf import NMPC_CBF_MULTI_N
+from episodeTracker import EpisodeTracker
+
+from testSim import getStepObservations
+
 class CustomSystemEnv(gym.Env):
     def __init__(self):
         super().__init__()
@@ -24,18 +30,31 @@ class CustomSystemEnv(gym.Env):
         
         # Initialize simulation state
         self.state = None
-        self.current_step = 0
+        self.current_step = 0                                               # step counter
+        self.ep = EpisodeTracker(allRecord=False)
+        self.nmpc = NMPC_CBF_MULTI_N(0.1, list(range(10, 101, 5)), nObs=20) # create solvers
+        # self.reset()
 
     def reset(self, seed=None, options=None):
-        # Reset your simulation here
-        self.state = np.zeros(93, dtype=np.float32)  # Replace with actual reset
-        self.current_step = 0
-        return self.state, {}
+        
+        self.ep.reset()                                                             # reset episode tracker
+        self.map = genenv2(curriculum_level=1,gen_fig=False, maxObs=self.nmpc.nObs) # generate random map for episode
+        self.nmpc.setObstacles(self.map['obstacles'])                               # set obstacles for solver
+        self.targetPos = self.map['target_pos']                                     
+        self.nmpc.setTarget(self.targetPos)                                         # set target for solver
+        self.maxSimSteps = int(self.map["startDist"]*2 / self.nmpc.dt)              # calculate maximum sim time = 2*dist to target @ 1m/s
+        self.gateCheck = self.map["pass_targets"].copy()                            # copy target gates for reward checking
+        self.current_step = 0                                                       # reset step counter
+        self.state = getStepObservations(np.array([0,0,self.targetPos[2]]),         # get initial observation
+                                         np.array[0,0], 
+                                         0.00, 
+                                         self.map)
+        return self.state, {}   # return observation, no additional info
 
     def step(self, action):
-        # Convert first action element to discrete value
-        discrete_action = int(np.round(action[0] * (NUM_DISCRETE_OPTIONS - 1)))
-        discrete_action = np.clip(discrete_action, 0, NUM_DISCRETE_OPTIONS - 1)
+        # # Convert first action element to discrete value
+        # discrete_action = int(np.round(action[0] * (NUM_DISCRETE_OPTIONS - 1)))
+        # discrete_action = np.clip(discrete_action, 0, NUM_DISCRETE_OPTIONS - 1)
         
         # Continuous actions (elements 1-20)
         continuous_actions = action[1:]
@@ -62,3 +81,14 @@ class CustomSystemEnv(gym.Env):
     def _calculate_reward(self):
         """Replace with your actual reward calculation"""
         return 0.0  # Example
+
+
+########## TEST #########
+
+if __name__ == "__main__":
+
+    env = CustomSystemEnv()
+    obs, info = env.reset()
+    
+    print("Initial observation shape:", obs.shape)
+    print("State array:", env.state)

@@ -297,7 +297,7 @@ def calculate_reward(ep,isdone):
     return reward
 
 
-def getStepObservations(currentState,u,mpcTime,env):
+def getStepObservations(currentState,u,mpcTime,env,normalise=False):
     # Observations Vector (93)
     #                        0     1     2         3        4         5       6    7
     #   state (8)       : [x-pos y-pos sin(yaw) cos(yaw)  x-tgt-n   y-tgt-n   v    w ]
@@ -334,7 +334,10 @@ def getStepObservations(currentState,u,mpcTime,env):
     observations.extend(targetInfo)
     observations.append(mpcTime)
 
-    return observations
+    if normalise:
+        return normalise_observations(observations)
+    else:
+        return observations
 
 def normalise_observations(obs):
     obs = obs.flatten()
@@ -443,7 +446,7 @@ if __name__ == "__main__":
         # env = genenv(2, gen_fig=True)
         # plt.show()
         # input("[ENTER] to begin")
-        env = genenv2(curriculum_level=1,gen_fig=True)
+        env = genenv2(curriculum_level=1,gen_fig=True,maxObs=20)
         plt.show()
     else:
         file_path = './env1-1.pkl'
@@ -473,7 +476,7 @@ if __name__ == "__main__":
     # cbf = np.random.uniform(0,1, size=(1,nmpc.nObs))
     cbf = np.ones((1,nmpc.nObs))*0.01
     print(nmpc.normalActionsCBF(cbf))
-    ep = EpisodeTracker(allRecord=True)
+    ep = EpisodeTracker(allRecord=False)
     cnt=0
     gateCheck = env["pass_targets"].copy()
     totalReward = 0
@@ -502,6 +505,7 @@ if __name__ == "__main__":
         isdone = episodeTermination(ep)
         ep.done = isdone[0]
         ep.add_reward(calculate_reward(ep,isdone))
+        print(ep.rewards[-1])
         
         # advance for next step
         currentPos = newPos
@@ -518,7 +522,7 @@ if __name__ == "__main__":
             ep.done = True
     
 
-    plotSimdata(ep,env)
+    # plotSimdata(ep,env)
     # ani = plotSimdataAnimated(ep,env)
     # startPos = simdata[-1,2:5]
     # simdata = simulateStep(10,startPos,obstacles)

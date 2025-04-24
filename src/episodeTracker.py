@@ -1,8 +1,9 @@
 class EpisodeTracker:
     def __init__(self, allRecord=False):
-        self.reset(allRecord)
+        self.allRecord = allRecord
+        self.reset()
 
-    def reset(self,allRecord):
+    def reset(self):
         """Resets all tracking variables for a new episode"""
         self.latest_observation = None
         self.past_observations = []  # Stores last 5 observations (FIFO)
@@ -10,7 +11,6 @@ class EpisodeTracker:
         self.actions = []
         self.rewards = []
         self.done = False
-        self.allRecord = allRecord
         self.epStep = 0
         self.epPassGates = 0
 

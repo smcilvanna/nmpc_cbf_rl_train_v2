@@ -161,7 +161,7 @@ def setGate(start_pos,dist,rad,gap,offset,ngates):
         gate = np.vstack([gate,gatei])    
     return gate, gtgt
 
-def genCurEnv_2(curriculum_level, gen_fig=False):
+def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
     # Set Target and Start Positions
     if curriculum_level == 1:
         # two mostly overlapping obstacles along path
@@ -243,7 +243,7 @@ def genCurEnv_2(curriculum_level, gen_fig=False):
         passTarget = [gtgt1.tolist(),gtgt2.tolist()]
 
 
-    while obstacles.shape[0] < 20:
+    while obstacles.shape[0] < maxObs:
         dist = 150                                      # put a dummy obstacle far away
         angle = np.deg2rad(np.random.randint(0,90))     # randomise angle to obstacle and pos
         false_obs = np.round(np.array([np.cos(angle)*dist , np.sin(angle)*dist, (np.random.randint(1,101))/10]),1)
