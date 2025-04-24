@@ -335,23 +335,25 @@ def getStepObservations(currentState,u,mpcTime,env,normalise=False):
     observations.append(mpcTime)
 
     if normalise:
-        return normalise_observations(observations)
+        return normalise_observations(np.array(observations))
     else:
         return observations
 
 def normalise_observations(obs):
-    obs = obs.flatten()
     norm = obs.copy()
 
     # Normalisation assumptions
-    # Position: [-10, 10] m → [-1, 1]
-    norm[0:2] = np.clip(obs[0:2] / 10.0, -1.0, 1.0)
+    # Position: [0, 100] m → [0 , 1]
+    norm[0:2] = np.clip(obs[0:2] / 100.0, 0.0, 1.0)
     
     # Normalised x y & Heading: sin(θ), cos(θ): already in [0 1] [-1, 1]
     norm[2:6] = obs[2:6]
+
+    # Normalised x/y to target progress
+    norm
     i = 6
     
-    for _ in range(nmpc.nObs): 
+    for _ in range(20): 
         norm[i] = np.clip(obs[i] / 10.0, 0.0, 1.0)     # clearance
         norm[i+1] = obs[i+1]                           # sin(θ)
         norm[i+2] = obs[i+2]                           # cos(θ)
@@ -412,7 +414,7 @@ def print_observations(obs):
 
 def obstacle_metrics(state, obstacle):
     dx, dy = obstacle[0] - state[0], obstacle[1] - state[1]
-    dist = np.hypot(dx, dy) - (nmpc.vehRad + obstacle[2])
+    dist = np.hypot(dx, dy) - (0.55 + obstacle[2])
     angle = np.arctan2(dy, dx)
     return np.array([dist, np.sin(angle), np.cos(angle), obstacle[2]])
 

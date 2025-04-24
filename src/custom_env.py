@@ -45,10 +45,12 @@ class CustomSystemEnv(gym.Env):
         self.maxSimSteps = int(self.map["startDist"]*2 / self.nmpc.dt)              # calculate maximum sim time = 2*dist to target @ 1m/s
         self.gateCheck = self.map["pass_targets"].copy()                            # copy target gates for reward checking
         self.current_step = 0                                                       # reset step counter
-        self.state = getStepObservations(np.array([0,0,self.targetPos[2]]),         # get initial observation
-                                         np.array[0,0], 
-                                         0.00, 
-                                         self.map)
+        self.state = getStepObservations(
+                        currentState=np.array([0.0,0.0,self.targetPos[2]]),         # get initial observation
+                        u=np.array([0.0,0.0]), 
+                        mpcTime=0.00, 
+                        env=self.map,
+                        normalise=True)
         return self.state, {}   # return observation, no additional info
 
     def step(self, action):
@@ -90,5 +92,5 @@ if __name__ == "__main__":
     env = CustomSystemEnv()
     obs, info = env.reset()
     
-    print("Initial observation shape:", obs.shape)
+    print("Initial observation shape:", type(obs))
     print("State array:", env.state)
