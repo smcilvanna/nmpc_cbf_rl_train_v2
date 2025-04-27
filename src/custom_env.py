@@ -1,12 +1,12 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-
+from time import time
 from generateCurriculumEnvironment import genCurEnv_2 as genenv2
 from nmpc_cbf import NMPC_CBF_MULTI_N
 from episodeTracker import EpisodeTracker
 
-from testSim import getStepObservations
+from testSim import getStepObservations, checkCollision, episodeTermination, calculate_reward
 
 class CustomSystemEnv(gym.Env):
     def __init__(self):
@@ -45,8 +45,9 @@ class CustomSystemEnv(gym.Env):
         self.maxSimSteps = int(self.map["startDist"]*2 / self.nmpc.dt)              # calculate maximum sim time = 2*dist to target @ 1m/s
         self.gateCheck = self.map["pass_targets"].copy()                            # copy target gates for reward checking
         self.current_step = 0                                                       # reset step counter
-        self.state = getStepObservations(
-                        currentState=np.array([0.0,0.0,self.targetPos[2]]),         # get initial observation
+        self.currentPos = np.array([0.0,0.0,self.targetPos[2]])                     
+        self.state = getStepObservations(                                           # get initial observation          
+                        currentState=self.currentPos,
                         u=np.array([0.0,0.0]), 
                         mpcTime=0.00, 
                         env=self.map,
@@ -54,35 +55,53 @@ class CustomSystemEnv(gym.Env):
         return self.state, {}   # return observation, no additional info
 
     def step(self, action):
-        # # Convert first action element to discrete value
-        # discrete_action = int(np.round(action[0] * (NUM_DISCRETE_OPTIONS - 1)))
-        # discrete_action = np.clip(discrete_action, 0, NUM_DISCRETE_OPTIONS - 1)
+
+        # Simulate Step
+        newPos, u, mpcTime = self.simulateStep(self.currentPos, action[0 ,:-1])
         
-        # Continuous actions (elements 1-20)
-        continuous_actions = action[1:]
+        # Get Observations From Step
+        self.state = getStepObservations(newPos, u, mpcTime, self.map, normalise=True)
         
-        # Call your existing simulation step here
-        # REPLACE WITH YOUR SIMULATION CALL
-        self.state = self._simulate_step(discrete_action, continuous_actions)
+        # Log observations and actions
+        self.ep.add_observation(self.state)
+        self.ep.add_action(action.flatten().tolist())
+
+        # check if pass target is hit
+        if len(self.gateCheck) > 0:
+            for i, gate in enumerate(self.gateCheck):
+                hitgate, _ = checkCollision(newPos, np.array(gate + [0.6]))
+                if hitgate: # if hit
+                    self.gateCheck.pop(i)
+                    self.ep.epPassGates =+ 1
+                    break
         
-        # Calculate reward
-        reward = self._calculate_reward()  # Implement your reward logic
-        
+        # Check for termination conditions
+        timeout = self.current_step >= self.maxSimSteps     # Check for timeout
+        isdone = episodeTermination(self.ep)
+        isdone[0] = isdone[0] and timeout                   # Add timeout check to isdone
+        self.ep.done = isdone[0]
+        if not timeout:
+            reward = calculate_reward(self.ep,isdone)
+        else:
+            reward = -70
+
         # Check termination (customize as needed)
-        terminated = self.current_step >= 1000
+        terminated = isdone[0]
         truncated = False
         
+        self.ep.add_reward(reward)                          # Log reward
+        
+        # advance for next step
+        self.currentPos = newPos
         self.current_step += 1
         return self.state, reward, terminated, truncated, {}
-
-    def _simulate_step(self, discrete_action, continuous_actions):
-        """Replace with your actual simulation call"""
-        # Your existing code that advances the simulation 0.1s
-        return np.random.randn(93).astype(np.float32)  # Example
-
-    def _calculate_reward(self):
-        """Replace with your actual reward calculation"""
-        return 0.0  # Example
+    
+    def simulateStep(self, startState , cbf):
+        t = time()
+        u = self.nmpc.solve(startState,cbf)
+        currentPos = self.nmpc.stateHorizon[0,:]
+        mpcTime = time() - t
+        return currentPos, u, mpcTime
 
 
 ########## TEST #########
@@ -91,6 +110,13 @@ if __name__ == "__main__":
 
     env = CustomSystemEnv()
     obs, info = env.reset()
-    
-    print("Initial observation shape:", type(obs))
-    print("State array:", env.state)
+
+    action = np.ones((1,env.nmpc.nObs+1))*0.02
+    for i in range(2000):
+    # print(np.cos(env.currentPos[-1]))
+        obs, rew, term, trun, info = env.step(action)
+        print(obs[0:8], term)
+        if term:
+            break
+
+

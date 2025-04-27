@@ -222,15 +222,15 @@ def checkCollision(vehiclePos, obs):
     return collision, safe_sep
 
 def calculate_reward(ep,isdone):
-    # Observations list (93)
-    #                        0     1     2         3        4         5       6    7
-    #   state (8)       : [x-pos y-pos sin(yaw) cos(yaw)  x-tgt-n   y-tgt-n   v    w ]
+    # Observations Vector (93)
+    #                        0     1      2         3          4        5         6    7
+    #   state (8)       : [x-pos y-pos  x-tgt-n   y-tgt-n   sin(yaw) cos(yaw)     v    w ]
     #                       8+o      9+o        10+o      11+o    (o =obsIndex*4)
     #   obsObv (80)     : [dist, sin(angle), cos(angle), radius]
     #                         88    89           90          91
     #   targetInfo (4)  : [ dist, sin(angle), cos(angle) progress]
     #                         92
-    #   mpcTime  (1)    : [ mpcTime ] 
+    #   mpcTime  (1)    : [ mpcTime ]  
     observations = ep.latest_observation    
     
     # --- Every Step Components ---
@@ -299,8 +299,8 @@ def calculate_reward(ep,isdone):
 
 def getStepObservations(currentState,u,mpcTime,env,normalise=False):
     # Observations Vector (93)
-    #                        0     1     2         3        4         5       6    7
-    #   state (8)       : [x-pos y-pos sin(yaw) cos(yaw)  x-tgt-n   y-tgt-n   v    w ]
+    #                        0     1      2         3          4        5         6    7
+    #   state (8)       : [x-pos y-pos  x-tgt-n   y-tgt-n   sin(yaw) cos(yaw)     v    w ]
     #                       8+o      9+o        10+o      11+o    (o =obsIndex*4)
     #   obsObv (80)     : [dist, sin(angle), cos(angle), radius]
     #                         88    89           90          91
@@ -313,9 +313,9 @@ def getStepObservations(currentState,u,mpcTime,env,normalise=False):
     state.extend([0.0, np.sin(state[2]), np.cos(state[2])])
     state.extend(u.tolist())
     # state[2] = np.max([0, np.min([1,(targetPos[0]-state[0])/np.max([0.0001,targetPos[0]])])]) # scaled to target normalised x
-    state[2] = max(0, min(1, (targetPos[0] - state[0]) / max(0.0001, targetPos[0])))
+    state[2] = 1 - max(0, min(1, (targetPos[0] - state[0]) / max(0.0001, targetPos[0])))
     # state[3] = np.max([0, np.min([1,(targetPos[1]-state[1])/np.max([0.0001,targetPos[1]])])]) # scaled to target normalised y
-    state[3] = max(0, min(1, (targetPos[1] - state[1]) / max(0.0001, targetPos[1])))
+    state[3] = 1 - max(0, min(1, (targetPos[1] - state[1]) / max(0.0001, targetPos[1])))
 
     obsObsv =[]
     for o in obstacles:
@@ -350,51 +350,38 @@ def normalise_observations(obs):
     norm[2:6] = obs[2:6]
 
     # Normalised x/y to target progress
-    norm
-    i = 6
+    norm[6] = np.clip(norm[6],-1,1)
+    norm[7] = np.clip((norm[7]/0.7854),-1,1)
+
+    i = 8
     
     for _ in range(20): 
-        norm[i] = np.clip(obs[i] / 10.0, 0.0, 1.0)     # clearance
-        norm[i+1] = obs[i+1]                           # sin(θ)
-        norm[i+2] = obs[i+2]                           # cos(θ)
-        norm[i+3] = np.clip(obs[i+3] / 10.0, 0.0, 1.0)
+        norm[i] = np.clip(obs[i] / 100.0, 0.0, 1.0)         # clearance
+        norm[i+1] = obs[i+1]                                # sin(θ)
+        norm[i+2] = obs[i+2]                                # cos(θ)
+        norm[i+3] = np.clip(obs[i+3] / 10.0, 0.0, 1.0)      # radius
         i += 4
 
     # Target clearance (i), sin(θ), cos(θ)
-    norm[i]   = np.clip(obs[i] / 10.0, 0.0, 1.0)
-    norm[i+1] = obs[i+1]
-    norm[i+2] = obs[i+2]
-    i += 3
-
-    # Motion metrics
-    norm[i]   = np.clip(obs[i]   / 2.0,  0.0, 1.0)   # ave speed
-    norm[i+1] = np.clip(obs[i+1] / 2.0,  0.0, 1.0)   # max speed
-    norm[i+2] = np.clip(obs[i+2] / 2.0,  0.0, 1.0)   # ave angular
-    norm[i+3] = np.clip(obs[i+3] / 2.0,  0.0, 1.0)   # max angular
-    norm[i+4] = np.clip(obs[i+4] / 0.1,  0.0, 1.0)   # ave MPC t
-    norm[i+5] = np.clip(obs[i+5] / 0.1,  0.0, 1.0)   # max MPC t
-
-    # Targets hit: assume max 10 → [0, 1]
-    norm[i+6] = np.clip(obs[i+6] / 10.0, 0.0, 1.0)
-
-    # Target progress: already [0, 1]
-    norm[i+7] = obs[i+7]
-
+    norm[i]   = np.clip(obs[i] / 100.0, 0.0, 1.0)           # clearance
+    norm[i+1] = obs[i+1]                                    # sin(θ)
+    norm[i+2] = obs[i+2]                                    # cos(θ)
+    norm[i+3] = np.clip(obs[i+3], 0.0, 1.0)                 # progress
+    norm[i+4] = np.clip((obs[i+4]/0.2), 0.0 , 1.0 )         # mpc time
     return norm
 
 
 
 def print_observations(obs):
     # Observations Vector (93)
-    #                        0     1     2         3        4         5       6    7
-    #   state (8)       : [x-pos y-pos sin(yaw) cos(yaw)  x-tgt-n   y-tgt-n   v    w ]
+    #                        0     1      2         3          4        5         6    7
+    #   state (8)       : [x-pos y-pos  x-tgt-n   y-tgt-n   sin(yaw) cos(yaw)     v    w ]
     #                       8+o      9+o        10+o      11+o    (o =obsIndex*4)
     #   obsObv (80)     : [dist, sin(angle), cos(angle), radius]
     #                         88    89           90          91
     #   targetInfo (4)  : [ dist, sin(angle), cos(angle) progress]
     #                         92
     #   mpcTime  (1)    : [ mpcTime ]  
-    # obs = obs.flatten()
 
     full_labels = [
         "Current X", "Current Y", "sin(yaw)", "cos(yaw)", "X/x-target", "Y/y-target", "Velocity(v)", "Steering(w)"
