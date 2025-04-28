@@ -511,7 +511,7 @@ if __name__ == "__main__":
             ep.done = True
     
 
-    # plotSimdata(ep,env)
+    plotSimdata(ep,env)
     # ani = plotSimdataAnimated(ep,env)
     # startPos = simdata[-1,2:5]
     # simdata = simulateStep(10,startPos,obstacles)

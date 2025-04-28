@@ -5,9 +5,9 @@ from custom_env import CustomSystemEnv
 from action_persistence_wrapper import ActionPersistenceWrapper
 
 # Configuration
-NUM_ENVS = 1  # Number of parallel environments
-TOTAL_TIMESTEPS = 10000 #1_000_000
-SAVE_PATH = "./sac_temp/sac_custom_system"
+NUM_ENVS = 6  # Number of parallel environments
+TOTAL_TIMESTEPS = 1_000_000
+SAVE_PATH = "./sac_temp/sac_v1-1"
 
 def create_env():
     env = CustomSystemEnv()

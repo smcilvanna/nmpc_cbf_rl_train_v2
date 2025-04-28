@@ -130,6 +130,22 @@ class NMPC_CBF_MULTI_N:
         for solver in self.solvers:
             solver["opt"].set_value(solver["stateTgt"],  targetPos )
 
+        # Since this is only done on reset, need to initalise the state and control horizon arrays
+        x = targetPos[0]
+        y = targetPos[1]
+        th = np.arctan2(y, x)
+        # Precompute step indices (0 to N)
+        steps = np.arange(self.currentN + 1)
+        # Compute x and y positions at each step
+        x = steps * np.cos(th)
+        y = steps * np.sin(th)
+        # Yaw is constant for all steps
+        yaw_arr = np.full(self.currentN + 1, th)
+        # Stack into (N+1)x3 array
+        self.stateHorizon = np.column_stack((x, y, yaw_arr))
+        self.ctrlHorizon = np.column_stack((np.ones(self.currentN), np.zeros(self.currentN)))
+
+
     def solve(self, currentPos, cbfParms):
         # On first step init state and control horizon arrays
         if self.ctrlHorizon.size == 0 and self.stateHorizon.size == 0:

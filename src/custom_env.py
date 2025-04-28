@@ -98,7 +98,11 @@ class CustomSystemEnv(gym.Env):
     
     def simulateStep(self, startState , cbf):
         t = time()
-        u = self.nmpc.solve(startState,cbf)
+        try:
+            u = self.nmpc.solve(startState,cbf)
+        except:
+            print("Solver Fail")
+            u = np.array([0,0]) # if no solver solution stop and let fail episode with low velocity
         currentPos = self.nmpc.stateHorizon[0,:]
         mpcTime = time() - t
         return currentPos, u, mpcTime

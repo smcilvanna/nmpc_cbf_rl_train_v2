@@ -23,6 +23,10 @@ class ActionPersistenceWrapper(gym.Wrapper):
         # Update action only when required
         if self.steps_since_update % self.persist_steps == 0:
             self.current_action = action.copy()
+            # print(action)
+            # Adjust the nmpc solver
+            self.env.nmpc.adjustHorizon(action[-1])
+            # print(self.env.nmpc.currentN)
         
         # Execute environment step
         obs, reward, terminated, truncated, info = self.env.step(self.current_action)
