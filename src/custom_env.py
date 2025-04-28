@@ -57,7 +57,7 @@ class CustomSystemEnv(gym.Env):
     def step(self, action):
 
         # Simulate Step
-        newPos, u, mpcTime = self.simulateStep(self.currentPos, action[0 ,:-1])
+        newPos, u, mpcTime = self.simulateStep(self.currentPos, action[:-1])
         
         # Get Observations From Step
         self.state = getStepObservations(newPos, u, mpcTime, self.map, normalise=True)
@@ -78,7 +78,7 @@ class CustomSystemEnv(gym.Env):
         # Check for termination conditions
         timeout = self.current_step >= self.maxSimSteps     # Check for timeout
         isdone = episodeTermination(self.ep)
-        isdone[0] = isdone[0] and timeout                   # Add timeout check to isdone
+        isdone[0] = isdone[0] or timeout                   # Add timeout check to isdone
         self.ep.done = isdone[0]
         if not timeout:
             reward = calculate_reward(self.ep,isdone)
@@ -111,12 +111,15 @@ if __name__ == "__main__":
     env = CustomSystemEnv()
     obs, info = env.reset()
 
-    action = np.ones((1,env.nmpc.nObs+1))*0.02
+    action = np.ones((1,env.nmpc.nObs+1))*0.00
     for i in range(2000):
     # print(np.cos(env.currentPos[-1]))
         obs, rew, term, trun, info = env.step(action)
         print(obs[0:8], term)
         if term:
             break
+    print(env.targetPos)
+    print(env.ep.rewards)
+    print(sum(env.ep.rewards))
 
 

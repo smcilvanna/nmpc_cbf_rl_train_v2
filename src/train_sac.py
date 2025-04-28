@@ -5,9 +5,9 @@ from custom_env import CustomSystemEnv
 from action_persistence_wrapper import ActionPersistenceWrapper
 
 # Configuration
-NUM_ENVS = 4  # Number of parallel environments
-TOTAL_TIMESTEPS = 1_000_000
-SAVE_PATH = "sac_custom_system"
+NUM_ENVS = 1  # Number of parallel environments
+TOTAL_TIMESTEPS = 10000 #1_000_000
+SAVE_PATH = "./sac_temp/sac_custom_system"
 
 def create_env():
     env = CustomSystemEnv()
@@ -27,7 +27,7 @@ if __name__ == "__main__":
         "MlpPolicy",
         vec_env,
         verbose=1,
-        tensorboard_log="./tensorboard_logs/",
+        # tensorboard_log="./tensorboard_logs/",
         buffer_size=1_000_000,
         learning_starts=5000,
         batch_size=256,
