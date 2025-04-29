@@ -9,9 +9,9 @@ from episodeTracker import EpisodeTracker
 from testSim import getStepObservations, checkCollision, episodeTermination, calculate_reward
 
 class CustomSystemEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, curriculum_level=1):
         super().__init__()
-        
+        self.curriculum_level = curriculum_level
         # Action space: 21 continuous [0,1] values
         self.action_space = spaces.Box(
             low=0.0,
@@ -38,7 +38,7 @@ class CustomSystemEnv(gym.Env):
     def reset(self, seed=None, options=None):
         
         self.ep.reset()                                                             # reset episode tracker
-        self.map = genenv2(curriculum_level=1,gen_fig=False, maxObs=self.nmpc.nObs) # generate random map for episode
+        self.map = genenv2(curriculum_level=self.curriculum_level,gen_fig=False, maxObs=self.nmpc.nObs) # generate random map for episode
         self.nmpc.setObstacles(self.map['obstacles'])                               # set obstacles for solver
         self.targetPos = self.map['target_pos']                                     
         self.nmpc.setTarget(self.targetPos)                                         # set target for solver
