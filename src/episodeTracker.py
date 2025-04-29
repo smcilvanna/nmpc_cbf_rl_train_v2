@@ -24,7 +24,7 @@ class EpisodeTracker:
         self.latest_observation = observation
         if self.allRecord:
             self.all_observation(observation)
-        self.epStep =+ 1 # increment step counter
+        self.epStep += 1 # increment step counter
 
     def all_observation(self, observation):
         """Updates observation history for all observations"""
