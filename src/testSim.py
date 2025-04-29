@@ -257,7 +257,8 @@ def calculate_reward(ep,isdone):
         # cbf_diff = np.linalg.norm(np.array(current_actions[0:-1]) - np.array(prev_actions[0:-1])) / 2.0  # this is wrong , cbf actions will be in [0 1] range
         # n_diff = np.linalg.norm(current_actions[-1] - prev_actions[-1]) / 2.0 # this is wrong , N action will be in [0 1] range
         # cbf_diff = np.abs(np.array(current_actions[0:-1]) - np.array(prev_actions[0:-1]))
-        cbf_diff = np.linalg.norm(current_actions[0:-1] - prev_actions[0:-1])  # L2 norm                        
+        # cbf_diff = np.linalg.norm(current_actions[0:-1] - prev_actions[0:-1])   # L2 norm
+        cbf_diff = np.abs(current_actions[0:-1] - prev_actions[0:-1]).mean()    # L1 norm
         ra = np.exp(-5 * cbf_diff**2)                                       # Reward interval [0 1]
         # not punishing mpc changes as this is reflected in mpc time
         # n_ra = np.exp(-7 * (abs(current_actions[-1]-prev_actions[-1]))**2)  # Reward interval [0 1]
