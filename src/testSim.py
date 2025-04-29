@@ -276,7 +276,7 @@ def calculate_reward(ep,isdone):
     
     reward      =        0.2*rv   +    0.2*rp    +   0.2*ra    +   0.4*rt   # total step reward
     
-    reward = reward/4   # Step reward interval [0 1]
+    reward = reward   # Step reward interval [0 1]
     
     #                 0       1         2         3     
     # isdone list : [done, atTarget, collision, tooSlow] 
