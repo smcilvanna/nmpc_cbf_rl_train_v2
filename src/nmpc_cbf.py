@@ -183,36 +183,10 @@ class NMPC_CBF_MULTI_N:
         # Warm start control horizon, start max v, zero w
         self.ctrlHorizon = np.column_stack((np.ones(self.currentN), np.zeros(self.currentN)))
 
-        # addState = [self.stateHorizon[-1] + (i+1)*dx 
-        #         for i in range(newN - self.currentN)]
-        # # addCtrl = [self.ctrlHorizon[-1] 
-        # #         for _ in range(newN - self.currentN)]
-        
-        # self.ctrlHorizon = []           # empty horizon arrays
-        # self.stateHorizon = []
         return
     
-    # def adjustHorizon(self,newIdx):
-    #     newN = self.nVals[newIdx]
-    #     if newN < self.currentN:
-    #         self.ctrlHorizon  = self.ctrlHorizon[0:newN  ,:]
-    #         self.stateHorizon = self.stateHorizon[0:newN+1,:]
-    #     else:
-    #         # addCtrl  = np.tile( self.ctrlHorizon[-1,:], (newN-self.currentN,1))
-    #         # addState = np.tile(self.stateHorizon[-1,:], (newN-self.currentN,1))
-    #         # self.ctrlHorizon  = np.vstack([self.ctrlHorizon, addCtrl])
-    #         # self.stateHorizon = np.vstack([self.stateHorizon, addState])
-    #         # Extrapolate using the last two states/controls
-    #         dx = self.stateHorizon[-1] - self.stateHorizon[-2]
-    #         addState = [self.stateHorizon[-1] + (i+1)*dx for i in range(newN - self.currentN)]
-    #         addCtrl = [self.ctrlHorizon[-1] for _ in range(newN - self.currentN)]
-    #         self.ctrlHorizon = np.vstack([self.ctrlHorizon, addCtrl])
-    #         self.stateHorizon = np.vstack([self.stateHorizon, addState])
-    #     self.currentN = newN
-    #     self.solversIdx = newIdx
-
     def adjustHorizon(self, action):
-        newIdx = self.normalActionsN(action)
+        newIdx = self.indexOfN(action)
         newN = self.nVals[newIdx]
         if newN < self.currentN:
             # Shrink horizon
@@ -242,5 +216,7 @@ class NMPC_CBF_MULTI_N:
         Nindex = round(action * self.nrange)
         Nindex = np.clip(Nindex,0,self.nrange-1)
         return Nindex
+
+
 if __name__ =="__main__":
     print("NMPC-CBF Solver Class Definition")
