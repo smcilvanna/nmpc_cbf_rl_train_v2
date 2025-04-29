@@ -33,8 +33,8 @@ if __name__ == "__main__":
         batch_size=256,
         tau=0.005,
         gamma=0.99,
-        train_freq=10,
-        gradient_steps=10,
+        train_freq=1,
+        gradient_steps=1,
         policy_kwargs=dict(net_arch=[256, 256])
     )
 
