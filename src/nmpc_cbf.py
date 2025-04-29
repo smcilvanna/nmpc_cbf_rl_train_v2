@@ -106,8 +106,10 @@ class NMPC_CBF_MULTI_N:
         opts_setting = {'ipopt.max_iter':500,
                         'ipopt.print_level':0,
                         'print_time':0,
-                        'ipopt.acceptable_tol':1e-8,
-                        'ipopt.acceptable_obj_change_tol':1e-6}
+                        'ipopt.acceptable_tol':1e-6,            # relaxed from 1e-8
+                        'ipopt.acceptable_obj_change_tol':1e-5 # relaxed from 1e-6
+                        # 'ipopt.warm_start_init_point': 'yes'    # Enable warm starting
+                        }
         
         solver["opt"].solver('ipopt', opts_setting)
         self.solvers.append(solver)     # append this N horizon solver to the solver stack
