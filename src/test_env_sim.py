@@ -36,7 +36,7 @@ def plotSimdata(simdata,env):
     n = simdata[:,-1]
 
     ax1.scatter(x, y,s=1)      # Plots y versus x as a line
-    ax1.add_patch(Circle(simdata[-1,2:5], 0.55, color='black', alpha=0.9, label="vehicle"))
+    ax1.add_patch(Circle(simdata[-1,0:2], 0.55, color='black', alpha=0.9, label="vehicle"))
     ax1.add_patch(Circle(target[0:2], 0.2, color='green', alpha=0.9))
     for i in range(ob.shape[0]):
         ax1.add_patch(Circle( ob[i,0:2], ob[i,2], color='red')) 
@@ -75,7 +75,7 @@ def plotSimdata(simdata,env):
 
 def plotSimdataAnimated(ep,env):
     
-    simdata = ep2simdata(ep)
+    # simdata = ep2simdata(ep)
     ob = env['obstacles']
     target = env['target_pos']
         
@@ -167,15 +167,13 @@ def plotSimdataAnimated(ep,env):
     return ani  # Return animation object to prevent garbage collection
 
 
-
-
 if __name__ == "__main__":
     # Manual test configuration
     TEST_EPISODES = 1
-    MAX_STEPS = 300
+    MAX_STEPS = 500
     
     # Create and test environment
-    env = MPCHorizonEnv(curriculum_level=1)
+    env = MPCHorizonEnv(curriculum_level=2)
     
     for ep in range(TEST_EPISODES):
         obs, _ = env.reset()
@@ -199,7 +197,7 @@ if __name__ == "__main__":
 
             # Print step info
             print(f"\nStep {step+1}:")
-            print(f"Action taken: {env.horizon_options[action]}")
+            print(f"Action taken: {env.horizon_options[action]} | N= {env.nmpc.currentN}")
             print(f"Reward: {reward:.2f}")
             print(f"New obs: {next_obs[:4]}... (truncated)")
             print(f"MPC time: {next_obs[0]:.3f}s")
