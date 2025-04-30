@@ -10,30 +10,26 @@ class ActionPersistenceWrapper(gym.Wrapper):
         super().__init__(env)
         self.persist_steps = persist_steps
         self.current_action = 0  # Default first action
-        self.steps_since_change = 0
+        self.steps_since_change = self.persist_steps # Initialize to trigger action on first step
 
     def step(self, action):
         if self.steps_since_change >= self.persist_steps:
             self.current_action = action
             self.steps_since_change = 0
-            
         self.steps_since_change += 1
         return super().step(self.current_action)
 
     def reset(self, **kwargs):
-        self.steps_since_change = 0
+        self.steps_since_change = self.persist_steps  # Reset to trigger action on first step
+        self.current_action = 0  # Reset action to default
         return super().reset(**kwargs)
 
 
 class MPCHorizonEnv(gym.Env):
-    def __init__(self, curriculum_level=1, action_interval=5):
+    def __init__(self, curriculum_level=1):
         super().__init__()
-        
-
-        # Action interval parameter
-        self.action_interval = action_interval  
-        self.steps_since_action = 0
         self.last_horizon = None
+        self.current_horizon = None
         self.last_target_dist = []
         # Curriculum parameters
         self.curriculum_level = curriculum_level
@@ -54,7 +50,7 @@ class MPCHorizonEnv(gym.Env):
         
         # MPC system
         self.nmpc = NMPC_CBF_MULTI_N(0.1, self.horizon_options, nObs=20)
-        self.reset()
+        # self.reset()
 
     def add_velocity(self,v):
         self.past_lin_vels.append(v)
@@ -62,18 +58,15 @@ class MPCHorizonEnv(gym.Env):
         return 
 
     def reset(self, seed=None, options=None):
-        self.steps_since_action = 0
         self.last_horizon = None
-
+        self.last_mpc_time = None
         # Generate new environment
         self.map = genCurEnv_2(curriculum_level=self.curriculum_level, 
                               gen_fig=True, maxObs=self.nmpc.nObs)
-        
         # Initialize MPC
         self.nmpc.setObstacles(self.map['obstacles'])
         self.nmpc.setTarget(self.map['target_pos'])
         self.current_pos = np.array([0.0, 0.0, self.map['target_pos'][2]])
-        
         return self._get_obs(), {}
 
     def _get_obs(self):
@@ -108,35 +101,21 @@ class MPCHorizonEnv(gym.Env):
         return np.array(obs_list, dtype=np.float32)
 
     def step(self, action):
-        # Only change horizon at specified intervals
-        if self.steps_since_action % self.action_interval == 0:
-            new_horizon = self.horizon_options[action]
-            self.nmpc.adjustHorizon(new_horizon)
-            self.last_horizon = new_horizon
-            horizon_changed = True
-            print(f"N= {self.nmpc.currentN}")
-        else:
-            new_horizon = self.last_horizon
-            horizon_changed = False
-            
-        self.steps_since_action += 1
-        
+        self.current_horizon = self.horizon_options[action]
+        self.nmpc.adjustHorizon(self.current_horizon)
+        horizon_changed = True if (self.current_horizon == self.last_horizon or self.last_horizon == None) else False
         # Solve MPC  <<<<<<<<<<<<<< ADD CBF CUSTOM PREDICT HERE
         t = time()
         u = self.nmpc.solve(self.current_pos, np.ones(20)*0.2)
         mpc_time = time() - t
         self.current_pos = self.nmpc.stateHorizon[0,:]
         self.add_velocity(u[0])
-
-        # Calculate reward with smoothness component
-        reward, done = self._calculate_reward(self.current_pos, mpc_time, new_horizon, horizon_changed)
-        
-        # Update state
+        reward, done = self._calculate_reward(self.current_pos, mpc_time, horizon_changed)
         self.last_mpc_time = mpc_time
-        
+        self.last_horizon = self.current_horizon
         return self._get_obs(), reward, done, False, {"u":u}
 
-    def _calculate_reward(self, position, mpc_time, horizon, horizon_changed):
+    def _calculate_reward(self, position, mpc_time, horizon_changed):
         target_dist = np.linalg.norm(position[:2] - self.map['target_pos'][:2])
         collision = any(self.checkCollision(position, obs)[0] for obs in self.map['obstacles'])
         velocity = self.past_lin_vels[-1]  # Assuming position[3] contains velocity (add to observations)
