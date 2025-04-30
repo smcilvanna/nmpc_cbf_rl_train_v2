@@ -1,9 +1,8 @@
 import numpy as np
-from custom_env_horizon import MPCHorizonEnv
+from custom_env_horizon import MPCHorizonEnv, ActionPersistenceWrapper
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.animation import FuncAnimation
-
 
 
 def plotSimdata(simdata,env):
@@ -170,24 +169,36 @@ def plotSimdataAnimated(ep,env):
 if __name__ == "__main__":
     # Manual test configuration
     TEST_EPISODES = 1
-    MAX_STEPS = 500
+    MAX_STEPS = 20  # Reduce steps for easier debugging
+    PERSIST_STEPS = 5  # Test action persistence interval
     
-    # Create and test environment
-    env = MPCHorizonEnv(curriculum_level=2)
+    # Create wrapped environment
+    env = ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=2), persist_steps=PERSIST_STEPS)
     
     for ep in range(TEST_EPISODES):
         obs, _ = env.reset()
         done = False
         step = 0
+        last_action = None
+        action_counter = 0
         
         print(f"\n=== Episode {ep+1} ===")
         print(f"Initial observation: {obs[:4]}... (truncated)")
         log = []
         while not done and step < MAX_STEPS:
-            # Take random action
+            # Take random action (will only be applied every `PERSIST_STEPS` steps)
             action = env.action_space.sample()
             next_obs, reward, done, _, info = env.step(action)
 
+            # Track action changes
+            if action != last_action:
+                print(f"\n[ACTION CHANGED] New action: {env.horizon_options[action]} (Step {step+1})")
+                last_action = action
+                action_counter = 0
+            else:
+                action_counter += 1
+
+            # Logging (optional)
             log_row = env.current_pos.tolist()
             log_row.extend(info["u"].tolist())
             log_row.extend(next_obs.tolist())
@@ -197,9 +208,8 @@ if __name__ == "__main__":
 
             # Print step info
             print(f"\nStep {step+1}:")
-            print(f"Action taken: {env.horizon_options[action]} | N= {env.nmpc.currentN}")
+            print(f"Action active: {env.horizon_options[last_action]} | N= {env.nmpc.currentN}")
             print(f"Reward: {reward:.2f}")
-            print(f"New obs: {next_obs[:4]}... (truncated)")
             print(f"MPC time: {next_obs[0]:.3f}s")
             print(f"Target distance: {next_obs[1]:.2f}m")
             
