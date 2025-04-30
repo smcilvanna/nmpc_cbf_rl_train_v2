@@ -169,8 +169,8 @@ def plotSimdataAnimated(ep,env):
 if __name__ == "__main__":
     # Manual test configuration
     TEST_EPISODES = 1
-    MAX_STEPS = 20  # Reduce steps for easier debugging
-    PERSIST_STEPS = 5  # Test action persistence interval
+    MAX_STEPS = 400  # Reduce steps for easier debugging
+    PERSIST_STEPS = 10  # Test action persistence interval
     
     # Create wrapped environment
     env = ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=2), persist_steps=PERSIST_STEPS)
@@ -190,41 +190,39 @@ if __name__ == "__main__":
             action = env.action_space.sample()
             next_obs, reward, done, _, info = env.step(action)
 
-            # Track action changes
-            if action != last_action:
-                print(f"\n[ACTION CHANGED] New action: {env.horizon_options[action]} (Step {step+1})")
-                last_action = action
-                action_counter = 0
-            else:
-                action_counter += 1
+            # # Track action changes
+            # if action != last_action:
+            #     print(f"\n[ACTION CHANGED] New action: {env.env.horizon_options[action]} (Step {step+1})")
+            #     last_action = action
+            #     action_counter = 0
+            # else:
+            #     action_counter += 1
 
             # Logging (optional)
-            log_row = env.current_pos.tolist()
+            log_row = env.env.current_pos.tolist()
             log_row.extend(info["u"].tolist())
             log_row.extend(next_obs.tolist())
             log_row.extend([reward])
-            log_row.extend([action])
+            log_row.extend([env.env.nmpc.currentN])
             log.append(log_row)
 
             # Print step info
             print(f"\nStep {step+1}:")
-            print(f"Action active: {env.horizon_options[last_action]} | N= {env.nmpc.currentN}")
-            print(f"Reward: {reward:.2f}")
-            print(f"MPC time: {next_obs[0]:.3f}s")
-            print(f"Target distance: {next_obs[1]:.2f}m")
+            # print(f"Action active: {env.env.horizon_options[last_action]} | N= {env.env.nmpc.currentN}")
+            # print(f"Reward: {reward:.2f}")
+            # print(f"MPC time: {next_obs[0]:.3f}s")
+            # print(f"Target distance: {next_obs[1]:.2f}m")
             
-            if done:
-                print("Episode terminated!")
-                if env.current_pos[0] < 0.5:
-                    print("Reason: Reached target!")
-                else:
-                    print("Reason: Collision detected!")
+            # if done:
+            #     print("Episode terminated!")
+            #     if env.env.current_pos[0] < 0.5:
+            #         print("Reason: Reached target!")
+            #     else:
+            #         print("Reason: Collision detected!")
             
             step += 1
             obs = next_obs
     
-    print(step)
+    # Plot run
     simdata = np.array(log)
-    print(simdata.size)
-
-    plotSimdata(simdata,env.map)
+    plotSimdata(simdata,env.env.map)
