@@ -84,16 +84,20 @@ class NMPC_CBF_MULTI_N:
         for i in range(N):
             st = solver["stateHorizon"][i, :]
             st_next = solver["stateHorizon"][i+1, :]
-            
-            # Vectorized over all obstacles
             obs_xy = solver["obstacles"][:, :2]
-            a = (solver["obstacles"][:, 2] + self.vehRad)**-2
-            h = a * ((st[0] - obs_xy[:, 0])**2 + (st[1] - obs_xy[:, 1])**2) - 1
-            lfh = 2 * a * (
-                (st[0] - obs_xy[:, 0]) * (st_next[0] - st[0])/self.dt +
-                (st[1] - obs_xy[:, 1]) * (st_next[1] - st[1])/self.dt
-            )
-            solver["opt"].subject_to(lfh + solver["cbfParms"] * h >= 0)
+            cbf = "relaxed" # <<<<<<<<<<<<<<<<<<<<<<<<<<< SET CBF TYPE <<<<<<<<<<<<<<<<<<<<<<<<
+            if cbf == "ecbf":
+                # >>> ECBF <<< Vectorised
+                a = (solver["obstacles"][:, 2] + self.vehRad)**-2
+                h = a * ((st[0] - obs_xy[:, 0])**2 + (st[1] - obs_xy[:, 1])**2) - 1
+                lfh = 2 * a * ( (st[0] - obs_xy[:, 0]) * (st_next[0] - st[0])/self.dt +
+                                (st[1] - obs_xy[:, 1]) * (st_next[1] - st[1])/self.dt   )
+                solver["opt"].subject_to(lfh + solver["cbfParms"] * h >= 0)
+            elif cbf == "relaxed":
+                # >>> Relaxed CBF <<< Vectorised
+                h =      ((st[0]      - obs_xy[:, 0])**2 + (st[1]      - obs_xy[:, 1])**2) - (solver["obstacles"][:, 2] + self.vehRad)**2
+                h_next = ((st_next[0] - obs_xy[:, 0])**2 + (st_next[1] - obs_xy[:, 1])**2) - (solver["obstacles"][:, 2] + self.vehRad)**2
+                solver["opt"].subject_to(h_next - (1 - solver["cbfParms"]) * h >= 0)
 
         # boundary of state and control input
         solver["opt"].subject_to(solver["opt"].bounded(self.min_x,     solver["stateHorizon"][:,0], self.max_x))
@@ -106,7 +110,7 @@ class NMPC_CBF_MULTI_N:
         opts_setting = {'ipopt.max_iter':500,
                         'ipopt.print_level':0,
                         'print_time':0,
-                        'ipopt.acceptable_tol':1e-6,            # relaxed from 1e-8
+                        'ipopt.acceptable_tol':1e-4,            # relaxed from 1e-8
                         'ipopt.acceptable_obj_change_tol':1e-5 # relaxed from 1e-6
                         # 'ipopt.warm_start_init_point': 'yes'    # Enable warm starting
                         }
@@ -157,7 +161,7 @@ class NMPC_CBF_MULTI_N:
         solver = self.solvers[self.solversIdx]
         # set the parameters
         solver["opt"].set_value(solver["stateNow"],  currentPos)
-        solver["opt"].set_value(solver["cbfParms"],  self.normalActionsCBF(cbfParms)  )
+        solver["opt"].set_value(solver["cbfParms"],  cbfParms  )
         # set the optimisation variables
         solver["opt"].set_initial(solver["stateHorizon"], self.stateHorizon)    # provide the initial guess of state for the next step
         solver["opt"].set_initial(solver["ctrlHorizon"], self.ctrlHorizon)            # provide the initial guess of control for the next step       
@@ -208,14 +212,14 @@ class NMPC_CBF_MULTI_N:
         self.currentN = newN
         self.solversIdx = newIdx
 
-    def normalActionsCBF(self, actions):
-        cbf = actions * (self.maxCBF - self.minCBF) + self.minCBF
-        return cbf
+    # def normalActionsCBF(self, actions):
+    #     cbf = actions * (self.maxCBF - self.minCBF) + self.minCBF
+    #     return cbf
     
-    def normalActionsN(self, action):
-        Nindex = round(action * self.nrange)
-        Nindex = np.clip(Nindex,0,self.nrange-1)
-        return Nindex
+    # def normalActionsN(self, action):
+    #     Nindex = round(action * self.nrange)
+    #     Nindex = np.clip(Nindex,0,self.nrange-1)
+    #     return Nindex
 
 
 if __name__ =="__main__":
