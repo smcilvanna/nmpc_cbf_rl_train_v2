@@ -122,23 +122,43 @@ class MPCHorizonEnv(gym.Env):
     def _calculate_reward(self, position, mpc_time, horizon, horizon_changed):
         target_dist = np.linalg.norm(position[:2] - self.map['target_pos'][:2])
         collision = any(self.checkCollision(position, obs)[0] for obs in self.map['obstacles'])
-        if self.last_target_dist:
-            progress = self.last_target_dist - target_dist
-        else:
-            progress = 1
+        velocity = position[3]  # Assuming position[3] contains velocity (add to observations)
         
-        base_reward = (
-              progress
-            - 100 * collision
-            - 0.2 * mpc_time
-            + 0.1 * (1 / (horizon/10))
+        # Velocity rewards (maintain ~1 m/s)
+        velocity_reward = np.exp(-2*(velocity - 1.0)**2)  # Gaussian peak at 1 m/s
+        deadlock_penalty = np.where(velocity < 0.1, 5.0, 0.0)  # Penalize near-zero velocity
+        
+        # MPC time rewards (piecewise function)
+        if mpc_time <= 0.1:
+            time_reward = 1.0  # Full reward for fast solves
+        elif mpc_time <= 0.25:
+            time_reward = 0.5 - (mpc_time - 0.1)/0.3  # Linear decay 0.5->0
+        else:
+            time_reward = -1.0  # Penalize excessive solve times
+            
+        # Horizon efficiency bonus (encourage minimal sufficient horizons)
+        horizon_efficiency = 0.2 * (1 / (horizon/10)) if horizon < 50 else 0.0
+        
+        # Collision penalty (keep severe)
+        collision_penalty = 100.0 if collision else 0.0
+        
+        # Progress reward (keep small since MPC handles progress)
+        progress_reward = 0.5 * (self.last_target_dist - target_dist) if self.last_target_dist else 0.0
+        
+        # Smoothness penalty (discourage frequent horizon changes)
+        change_penalty = 0.3 if horizon_changed else 0.0
+        
+        total_reward = (
+            velocity_reward +
+            time_reward +
+            horizon_efficiency +
+            progress_reward -
+            collision_penalty -
+            deadlock_penalty -
+            change_penalty
         )
         
-        # Add smoothness penalty for frequent changes
-        smoothness_penalty = 0.5 if horizon_changed else 0.0
-        total_reward = base_reward - smoothness_penalty
-        
-        done = target_dist < 0.5 or collision
+        done = target_dist < 0.5 or collision or velocity < 0.05
         self.last_target_dist = target_dist
         
         return total_reward, done
