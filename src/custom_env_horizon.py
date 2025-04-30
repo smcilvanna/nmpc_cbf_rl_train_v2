@@ -3,6 +3,7 @@ import numpy as np
 from generateCurriculumEnvironment import genCurEnv_2
 from nmpc_cbf import NMPC_CBF_MULTI_N
 from time import time
+from collections import deque
 
 class ActionPersistenceWrapper(gym.Wrapper):
     def __init__(self, env, persist_steps=5):
@@ -37,15 +38,17 @@ class MPCHorizonEnv(gym.Env):
         # Curriculum parameters
         self.curriculum_level = curriculum_level
         self.horizon_options = list(range(10, 101, 5))  # 10-100 in steps of 5
+        self.past_lin_vels = deque(maxlen=10)
+        self.av_lin_vel = 0
 
         # Action space: Discrete horizon selection
         self.action_space = gym.spaces.Discrete(len(self.horizon_options))
         
-        # Observation space: [mpc_time, target_dist, target_sin, target_cos] + 20*(obs_dist, obs_sin, obs_cos)
+        # Observation space: [mpc_time, target_dist, target_sin, target_cos] + 20*(obs_dist, obs_sin, obs_cos) + (lin_vel ave_lin_vel)
         self.observation_space = gym.spaces.Box(
             low=-np.inf, 
             high=np.inf,
-            shape=(4 + 20*3,),
+            shape=(4 + 20*3 + 2,),
             dtype=np.float32
         )
         
@@ -53,13 +56,18 @@ class MPCHorizonEnv(gym.Env):
         self.nmpc = NMPC_CBF_MULTI_N(0.1, self.horizon_options, nObs=20)
         self.reset()
 
+    def add_velocity(self,v):
+        self.past_lin_vels.append(v)
+        self.av_lin_vel = sum(self.past_lin_vels)/len(self.past_lin_vels)
+        return 
+
     def reset(self, seed=None, options=None):
         self.steps_since_action = 0
         self.last_horizon = None
 
         # Generate new environment
         self.map = genCurEnv_2(curriculum_level=self.curriculum_level, 
-                              gen_fig=False, maxObs=self.nmpc.nObs)
+                              gen_fig=True, maxObs=self.nmpc.nObs)
         
         # Initialize MPC
         self.nmpc.setObstacles(self.map['obstacles'])
@@ -88,7 +96,14 @@ class MPCHorizonEnv(gym.Env):
             dist = np.linalg.norm(vec) - 0.55 - obstacle[2]
             angle = np.arctan2(vec[1], vec[0])
             obs_list.extend([dist, np.sin(angle), np.cos(angle)])
-        
+
+        # 4. Velocities, current average
+        if len(self.past_lin_vels) > 0:
+            obs_list.extend([self.past_lin_vels[-1]])
+            obs_list.extend([self.av_lin_vel])
+        else:
+            obs_list.extend([0.0,0.0])
+
         # Convert to numpy array at the end
         return np.array(obs_list, dtype=np.float32)
 
@@ -99,6 +114,7 @@ class MPCHorizonEnv(gym.Env):
             self.nmpc.adjustHorizon(new_horizon)
             self.last_horizon = new_horizon
             horizon_changed = True
+            print(f"N= {self.nmpc.currentN}")
         else:
             new_horizon = self.last_horizon
             horizon_changed = False
@@ -107,9 +123,10 @@ class MPCHorizonEnv(gym.Env):
         
         # Solve MPC  <<<<<<<<<<<<<< ADD CBF CUSTOM PREDICT HERE
         t = time()
-        u = self.nmpc.solve(self.current_pos, np.ones(20)*0.5)
-        self.current_pos = self.nmpc.stateHorizon[0,:]
+        u = self.nmpc.solve(self.current_pos, np.ones(20)*0.2)
         mpc_time = time() - t
+        self.current_pos = self.nmpc.stateHorizon[0,:]
+        self.add_velocity(u[0])
 
         # Calculate reward with smoothness component
         reward, done = self._calculate_reward(self.current_pos, mpc_time, new_horizon, horizon_changed)
@@ -122,45 +139,67 @@ class MPCHorizonEnv(gym.Env):
     def _calculate_reward(self, position, mpc_time, horizon, horizon_changed):
         target_dist = np.linalg.norm(position[:2] - self.map['target_pos'][:2])
         collision = any(self.checkCollision(position, obs)[0] for obs in self.map['obstacles'])
-        velocity = position[3]  # Assuming position[3] contains velocity (add to observations)
+        velocity = self.past_lin_vels[-1]  # Assuming position[3] contains velocity (add to observations)
         
         # Velocity rewards (maintain ~1 m/s)
         velocity_reward = np.exp(-2*(velocity - 1.0)**2)  # Gaussian peak at 1 m/s
-        deadlock_penalty = np.where(velocity < 0.1, 5.0, 0.0)  # Penalize near-zero velocity
         
         # MPC time rewards (piecewise function)
-        if mpc_time <= 0.1:
-            time_reward = 1.0  # Full reward for fast solves
+        if mpc_time <= 0.05:
+            time_reward = 5.0  # Max reward for fastest solves
+        elif mpc_time <= 0.1:
+            # Linear increase: 0.1s → 1.0, 0.05s → 5.0
+            time_reward = 1.0 + (5.0 - 1.0) * (0.1 - mpc_time)/(0.1 - 0.05)
         elif mpc_time <= 0.25:
-            time_reward = 0.5 - (mpc_time - 0.1)/0.3  # Linear decay 0.5->0
+            # Linear decay: 0.1s → 1.0 → 0.25s → 0.0
+            time_reward = 1.0 - (mpc_time - 0.1)/0.15  # Adjusted slope
+        elif mpc_time <= 1.0:
+            # Linear penalty: 0.25s → 0.0 → 1.0s → -3.0
+            time_reward = -3.0 * (mpc_time - 0.25)/0.75
         else:
-            time_reward = -1.0  # Penalize excessive solve times
+            # Constant penalty beyond 1s
+            time_reward = -3.0
             
         # Horizon efficiency bonus (encourage minimal sufficient horizons)
-        horizon_efficiency = 0.2 * (1 / (horizon/10)) if horizon < 50 else 0.0
+        # horizon_efficiency = 0.2 * (1 / (horizon/10)) if horizon < 50 else 0.0
         
         # Collision penalty (keep severe)
         collision_penalty = 100.0 if collision else 0.0
         
         # Progress reward (keep small since MPC handles progress)
-        progress_reward = 0.5 * (self.last_target_dist - target_dist) if self.last_target_dist else 0.0
+        progress_reward = 0.2 * (self.last_target_dist - target_dist) if self.last_target_dist else 0.0
+        
+        # Deadlock penalty - if average velocity falls too low
+        deadlock_penalty = 50.0 if len(self.past_lin_vels) >= 10 and self.av_lin_vel < 0.05 else 0
         
         # Smoothness penalty (discourage frequent horizon changes)
-        change_penalty = 0.3 if horizon_changed else 0.0
+        change_penalty = 0.8 if horizon_changed else 0.0
         
-        total_reward = (
-            velocity_reward +
-            time_reward +
-            horizon_efficiency +
-            progress_reward -
-            collision_penalty -
-            deadlock_penalty -
-            change_penalty
-        )
-        
-        done = target_dist < 0.5 or collision or velocity < 0.05
+
+        # Check and report terminal conditions
+        at_target = target_dist < 0.5
+        deadlock = True if deadlock_penalty > 0 else False
+
+        if deadlock:    
+            print(f"[FAIL] Vehicle Deadlock | Average Velocity: {self.av_lin_vel}m/s across {len(self.past_lin_vels)} samples")
+        if collision:
+            print(f"[FAIL] Collision")
+        if at_target:
+            print(f"[SUCCESS] At target!")
+            progress_reward += 10
+
+        done =  at_target or collision or deadlock
         self.last_target_dist = target_dist
         
+        total_reward = (
+            velocity_reward
+            + time_reward
+            # horizon_efficiency +
+            + progress_reward
+            - collision_penalty
+            - deadlock_penalty
+            - change_penalty
+        )
         return total_reward, done
     
     def checkCollision(self,vehiclePos, obs):
