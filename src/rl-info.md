@@ -46,6 +46,12 @@
 
 ---
 
+
+## **4. Linear Velocity**
+**Position**: `[64:66]` (current_velocity average_velocity)  
+**Info**self.past_lin_vels: Average velocity is over previous 5 timesteps
+---
+
 ## **Visual Summary**
 | Section           | Elements | Indices   | Description                         |
 |-------------------|----------|-----------|-------------------------------------|
