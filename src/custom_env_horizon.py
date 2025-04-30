@@ -28,7 +28,7 @@ class ActionPersistenceWrapper(gym.Wrapper):
 class MPCHorizonEnv(gym.Env):
     def __init__(self, curriculum_level=1):
         super().__init__()
-        self.last_horizon = None
+        # self.last_horizon = None
         self.current_horizon = None
         self.last_target_dist = []
         # Curriculum parameters
@@ -58,8 +58,8 @@ class MPCHorizonEnv(gym.Env):
         return 
 
     def reset(self, seed=None, options=None):
-        self.last_horizon = None
-        self.last_mpc_time = None
+        # self.last_horizon = None
+        # self.last_mpc_time = None
         # Generate new environment
         self.map = genCurEnv_2(curriculum_level=self.curriculum_level, 
                               gen_fig=True, maxObs=self.nmpc.nObs)
@@ -69,13 +69,13 @@ class MPCHorizonEnv(gym.Env):
         self.current_pos = np.array([0.0, 0.0, self.map['target_pos'][2]])
         return self._get_obs(), {}
 
-    def _get_obs(self):
+    def _get_obs(self, mpc_time=0.0):
         """Simplified observation vector"""
         # Initialize as list
         obs_list = []
         
         # 1. MPC performance
-        obs_list.append(self.last_mpc_time if hasattr(self, 'last_mpc_time') else 0.0)
+        obs_list.append(mpc_time)
         
         # 2. Target information
         target_vec = self.map['target_pos'][:2] - self.current_pos[:2]
@@ -103,19 +103,32 @@ class MPCHorizonEnv(gym.Env):
     def step(self, action):
         self.current_horizon = self.horizon_options[action]
         self.nmpc.adjustHorizon(self.current_horizon)
-        horizon_changed = True if (self.current_horizon == self.last_horizon or self.last_horizon == None) else False
+        # horizon_changed = True if (self.current_horizon == self.last_horizon or self.last_horizon == None) else False
         # Solve MPC  <<<<<<<<<<<<<< ADD CBF CUSTOM PREDICT HERE
         t = time()
         u = self.nmpc.solve(self.current_pos, np.ones(20)*0.2)
         mpc_time = time() - t
+        
+        # Update state and velocity
         self.current_pos = self.nmpc.stateHorizon[0,:]
         self.add_velocity(u[0])
-        reward, done = self._calculate_reward(self.current_pos, mpc_time, horizon_changed)
-        self.last_mpc_time = mpc_time
-        self.last_horizon = self.current_horizon
-        return self._get_obs(), reward, done, False, {"u":u}
+        
+        # Calculate reward and done
+        reward, done = self._calculate_reward(self.current_pos, mpc_time)
+        # self.last_mpc_time = mpc_time
+        # self.last_horizon = self.current_horizon
 
-    def _calculate_reward(self, position, mpc_time, horizon_changed):
+        info = {
+            "u": u,
+            "mpc_time": mpc_time,
+            "horizon": self.current_horizon
+            # "collision": any(self.checkCollision(self.current_pos, obs)[0] for obs in self.map['obstacles']),
+            # "target_distance": np.linalg.norm(self.current_pos[:2] - self.map['target_pos'][:2])
+            }
+
+        return self._get_obs(mpc_time), reward, done, False, info
+
+    def _calculate_reward(self, position, mpc_time):
         target_dist = np.linalg.norm(position[:2] - self.map['target_pos'][:2])
         collision = any(self.checkCollision(position, obs)[0] for obs in self.map['obstacles'])
         velocity = self.past_lin_vels[-1]  # Assuming position[3] contains velocity (add to observations)
@@ -152,7 +165,7 @@ class MPCHorizonEnv(gym.Env):
         deadlock_penalty = 50.0 if len(self.past_lin_vels) >= 10 and self.av_lin_vel < 0.05 else 0
         
         # Smoothness penalty (discourage frequent horizon changes)
-        change_penalty = 0.8 if horizon_changed else 0.0
+        # change_penalty = 0.8 if horizon_changed else 0.0
         
 
         # Check and report terminal conditions
@@ -177,7 +190,7 @@ class MPCHorizonEnv(gym.Env):
             + progress_reward
             - collision_penalty
             - deadlock_penalty
-            - change_penalty
+            # - change_penalty
         )
         return total_reward, done
     

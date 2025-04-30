@@ -1,21 +1,39 @@
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
-from custom_env_horizon import MPCHorizonEnv
+from custom_env_horizon import MPCHorizonEnv, ActionPersistenceWrapper
+from stable_baselines3.common.callbacks import BaseCallback
 
+class CustomLoggingCallback(BaseCallback):
+    def __init__(self, verbose=0):
+        super().__init__(verbose)
+        self.horizon_lengths = []
+        self.mpc_times = []
+        self.collisions = []
+
+    def _on_step(self) -> bool:
+        # Extract metrics from all environments
+        for env_idx in range(len(self.locals["infos"])):
+            info = self.locals["infos"][env_idx]
+            self.logger.record(f"env{env_idx}/mpc_time", info["mpc_time"])
+            self.logger.record(f"env{env_idx}/horizon", info["horizon"])
+            # self.logger.record(f"env{env_idx}/collision", float(info["collision"]))
+            # self.logger.record(f"env{env_idx}/target_distance", info["target_distance"])
+        return True
+    
 # Curriculum schedule
 CURRICULUM_STAGES = [
-    {"level": 1, "steps": 2e5, "name": "basic"},
-    {"level": 2, "steps": 3e5, "name": "gates"},
+    {"level": 1, "steps": 1e4, "name": "basic"},
+    {"level": 2, "steps": 5e5, "name": "gates"},
     {"level": 3, "steps": 5e5, "name": "complex"}
 ]
 
 def train():
     model = None
     for stage in CURRICULUM_STAGES:
-        # Create vectorized environments
+        # Create vectorized environments with ActionPersistenceWrapper
         env = make_vec_env(
-            lambda: MPCHorizonEnv(curriculum_level=stage["level"]), 
+            lambda: ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=stage["level"])), 
             n_envs=4,
             vec_env_cls=SubprocVecEnv
         )
@@ -26,6 +44,7 @@ def train():
                 "MlpPolicy",
                 env,
                 verbose=1,
+                tensorboard_log="./ppo_mpc_tensorboard/",  # Enable TensorBoard logging
                 learning_rate=3e-4,
                 n_steps=512,
                 batch_size=64,
@@ -38,8 +57,12 @@ def train():
             # Update environment for existing model
             model.set_env(env)
         
-        # Train for current stage
-        model.learn(total_timesteps=int(stage["steps"]))
+         # Train with custom callback
+        model.learn(
+            total_timesteps=int(stage["steps"]),
+            callback=CustomLoggingCallback(),  # Add callback
+            tb_log_name=f"curriculum_{stage['name']}"  # Unique log name per stage
+        )
         
         # Save checkpoint
         model.save(f"ppo_mpc_horizon_{stage['name']}")
