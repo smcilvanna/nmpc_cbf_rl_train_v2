@@ -65,7 +65,7 @@ def train():
         )
         
         # Save checkpoint
-        model.save(f"ppo_mpc_horizon_{stage['name']}")
+        model.save(f"ppo_mpc_horizon_ks_1-1_{stage['name']}")
 
 if __name__ == "__main__":
     train()
