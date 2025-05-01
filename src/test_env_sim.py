@@ -1,5 +1,5 @@
 import numpy as np
-from custom_env_horizon import MPCHorizonEnv, ActionPersistenceWrapper
+from custom_env_horizon import MPCHorizonEnv
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.animation import FuncAnimation
@@ -30,9 +30,10 @@ def plotSimdata(simdata,env):
     th = simdata[:,2]
     v = simdata[:,3]
     w = simdata[:,4]
-    s = simdata[:,-2] #simdata[:,7] 
+    s = simdata[:,24] #simdata[:,7] 
     # s[0] = s[1]
-    n = simdata[:,-1]
+    n = simdata[:,-4]
+    a = simdata[:,-3]
 
     ax1.scatter(x, y,s=1)      # Plots y versus x as a line
     ax1.add_patch(Circle(simdata[-1,0:2], 0.55, color='black', alpha=0.9, label="vehicle"))
@@ -42,6 +43,7 @@ def plotSimdata(simdata,env):
 
     ax2.plot(t,mpct, label="mpc_time")
     ax3.plot(t,s, label="reward")
+    ax3.plot(t,a, label="action")
     # ax3.hlines(0,t[0],t[-1], colors='red')
     ax4.plot(t,v, label="v (m/s)")
     ax4.plot(t,w, label=r'$\omega$ (rad/s)')
@@ -169,11 +171,11 @@ def plotSimdataAnimated(ep,env):
 if __name__ == "__main__":
     # Manual test configuration
     TEST_EPISODES = 1
-    MAX_STEPS = 1000  # Reduce steps for easier debugging
-    PERSIST_STEPS = 10  # Test action persistence interval
+    MAX_STEPS = 500  # Reduce steps for easier debugging
+    # PERSIST_STEPS = 10  # Test action persistence interval
     
     # Create wrapped environment
-    env = ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=2), persist_steps=PERSIST_STEPS)
+    env = MPCHorizonEnv(curriculum_level=1)
     
     for ep in range(TEST_EPISODES):
         obs, _ = env.reset()
@@ -185,9 +187,15 @@ if __name__ == "__main__":
         print(f"\n=== Episode {ep+1} ===")
         print(f"Initial observation: {obs[:4]}... (truncated)")
         log = []
+        cnt = -10
         while not done and step < MAX_STEPS:
             # Take random action (will only be applied every `PERSIST_STEPS` steps)
-            action = env.action_space.sample()
+            action = np.ones((3,))*(0.5 + cnt*0.0499)
+            print(action)
+            if cnt == 10:
+                cnt = -10
+            else:
+                cnt += 1 
             next_obs, reward, done, _, info = env.step(action)
 
             # # Track action changes
@@ -199,11 +207,12 @@ if __name__ == "__main__":
             #     action_counter += 1
 
             # Logging (optional)
-            log_row = env.env.current_pos.tolist()
-            log_row.extend(info["u"].tolist())
-            log_row.extend(next_obs.tolist())
-            log_row.extend([reward])
-            log_row.extend([env.env.nmpc.currentN])
+            log_row = env.current_pos.tolist()  # [0:2]
+            log_row.extend(info["u"].tolist())  # [2:4]
+            log_row.extend(next_obs.tolist())   # [4:24]
+            log_row.extend([reward])            # [24]
+            log_row.extend([env.nmpc.currentN]) # [25]
+            log_row.extend(action.tolist())     # [26:29]
             log.append(log_row)
 
             # Print step info
@@ -225,4 +234,4 @@ if __name__ == "__main__":
     
     # Plot run
     simdata = np.array(log)
-    plotSimdata(simdata,env.env.map)
+    plotSimdata(simdata,env.map)

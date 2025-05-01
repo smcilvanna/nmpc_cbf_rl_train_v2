@@ -5,24 +5,24 @@ from nmpc_cbf import NMPC_CBF_MULTI_N
 from time import time
 from collections import deque
 
-class ActionPersistenceWrapper(gym.Wrapper):
-    def __init__(self, env, persist_steps=5):
-        super().__init__(env)
-        self.persist_steps = persist_steps
-        self.current_action = 0  # Default first action
-        self.steps_since_change = self.persist_steps # Initialize to trigger action on first step
+# class ActionPersistenceWrapper(gym.Wrapper):
+#     def __init__(self, env, persist_steps=5):
+#         super().__init__(env)
+#         self.persist_steps = persist_steps
+#         self.current_action = 0  # Default first action
+#         self.steps_since_change = self.persist_steps # Initialize to trigger action on first step
 
-    def step(self, action):
-        if self.steps_since_change >= self.persist_steps:
-            self.current_action = action
-            self.steps_since_change = 0
-        self.steps_since_change += 1
-        return super().step(self.current_action)
+#     def step(self, action):
+#         if self.steps_since_change >= self.persist_steps:
+#             self.current_action = action
+#             self.steps_since_change = 0
+#         self.steps_since_change += 1
+#         return super().step(self.current_action)
 
-    def reset(self, **kwargs):
-        self.steps_since_change = self.persist_steps  # Reset to trigger action on first step
-        self.current_action = 0  # Reset action to default
-        return super().reset(**kwargs)
+#     def reset(self, **kwargs):
+#         self.steps_since_change = self.persist_steps  # Reset to trigger action on first step
+#         self.current_action = 0  # Reset action to default
+#         return super().reset(**kwargs)
 
 
 class MPCHorizonEnv(gym.Env):
@@ -33,23 +33,31 @@ class MPCHorizonEnv(gym.Env):
         self.last_target_dist = []
         # Curriculum parameters
         self.curriculum_level = curriculum_level
-        self.horizon_options = list(range(10, 101, 5))  # 10-100 in steps of 5
+        self.horizon_options = [30]  # 10-100 in steps of 5
         self.past_lin_vels = deque(maxlen=10)
         self.av_lin_vel = 0
 
-        # Action space: Discrete horizon selection
-        self.action_space = gym.spaces.Discrete(len(self.horizon_options))
-        
-        # Observation space: [mpc_time, target_dist, target_sin, target_cos] + 20*(obs_dist, obs_sin, obs_cos) + (lin_vel ave_lin_vel)
+        # Action space: CBF parameter values for 3 obstacles
+        self.action_space = gym.spaces.Box(
+            low=0.0,
+            high=1.0,
+            shape=(3,),
+            dtype=np.float32
+        )
+        #                                                                           12        13       14       15
+        #                                                                            8         9       10       11
+        #                       0           1           2           3                4         5        6        7          16        17          18       19
+        # Observation space: [mpc_time, target_dist, target_sin, target_cos] + 3*(obs_dist, obs_sin, obs_cos  obs_rad) + (lin_vel ave_lin_vel, sin(yaw) cos(yaw))
         self.observation_space = gym.spaces.Box(
             low=-np.inf, 
             high=np.inf,
-            shape=(4 + 20*3 + 2,),
+            shape=(20,),
             dtype=np.float32
         )
         
         # MPC system
-        self.nmpc = NMPC_CBF_MULTI_N(0.1, self.horizon_options, nObs=20)
+        self.nmpc = NMPC_CBF_MULTI_N(0.1, self.horizon_options, nObs=3)
+        self.veh_rad = self.nmpc.vehRad
         # self.reset()
 
     def add_velocity(self,v):
@@ -60,121 +68,123 @@ class MPCHorizonEnv(gym.Env):
     def reset(self, seed=None, options=None):
         # Generate new environment
         self.map = genCurEnv_2(curriculum_level=self.curriculum_level, 
-                              gen_fig=True, maxObs=self.nmpc.nObs)
+                              gen_fig=True, maxObs=20)
         # Initialize MPC
-        self.nmpc.setObstacles(self.map['obstacles'])
         self.nmpc.setTarget(self.map['target_pos'])
         self.current_pos = np.array([0.0, 0.0, self.map['target_pos'][2]])
         self.nmpc.reset_nmpc(self.current_pos)
-        self.cbf_per_obs = self.get_cbf_values(self.map['obstacles'])
+        self.obstacle_check = np.hstack((self.map["obstacles"], np.zeros((20, 1))))
+        self._update_closest_obstacles()
         return self._get_obs(), {}
 
-    def get_cbf_values(self,obstacles):
-        cbfs = []
-        for orad in obstacles[:,2]:
-            cbf = 1.0742 * np.exp(-2.0 * orad) + 0.0225
-            cbfs.extend([cbf])
-        return np.array(cbfs).reshape((1,-1))
+    def _update_closest_obstacles(self):
+        # Check all obstacles in environment
+        for i, _ in enumerate(self.obstacle_check):
+            vec = self.obstacle_check[i,:2] - self.current_pos[:2]
+            self.obstacle_check[i,3] = np.linalg.norm(vec) - self.veh_rad - self.obstacle_check[i,2]
+        obs_sorted = self.obstacle_check[self.obstacle_check[:,3].argsort()]
+        self.closest_obstacles = obs_sorted[0:self.nmpc.nObs , 0:3]
+        self.nmpc.setObstacles(self.closest_obstacles)
+
 
     def _get_obs(self, mpc_time=0.0):
         """Simplified observation vector"""
         # Initialize as list
         obs_list = []
         
-        # 1. MPC performance
+        # 1. MPC performance [0]
         obs_list.append(mpc_time)
         
-        # 2. Target information
+        # 2. Target information [1:4]
         target_vec = self.map['target_pos'][:2] - self.current_pos[:2]
         target_dist = np.linalg.norm(target_vec)
         target_angle = np.arctan2(target_vec[1], target_vec[0])
         obs_list.extend([target_dist, np.sin(target_angle), np.cos(target_angle)])
         
-        # 3. Obstacle information (20 obstacles)
-        for obstacle in self.map['obstacles']:  # Renamed variable to avoid conflict
+        # 3. Obstacle information (3 obstacles) [4:13]
+        for obstacle in self.closest_obstacles:
             vec = obstacle[:2] - self.current_pos[:2]
-            dist = np.linalg.norm(vec) - 0.55 - obstacle[2]
+            dist = np.linalg.norm(vec) - self.veh_rad - obstacle[2]
             angle = np.arctan2(vec[1], vec[0])
-            obs_list.extend([dist, np.sin(angle), np.cos(angle)])
+            obs_list.extend([dist, np.sin(angle), np.cos(angle), obstacle[2]])
 
-        # 4. Velocities, current average
+        # 4. Velocities, current average [13:15]
         if len(self.past_lin_vels) > 0:
             obs_list.extend([self.past_lin_vels[-1]])
             obs_list.extend([self.av_lin_vel])
         else:
             obs_list.extend([0.0,0.0])
 
+        # 5. Current yaw angle
+        obs_list.extend([np.sin(self.current_pos[2]), np.cos(self.current_pos[2])])
+
         # Convert to numpy array at the end
         return np.array(obs_list, dtype=np.float32)
 
     def step(self, action):
-        self.current_horizon = self.horizon_options[action]
-        self.nmpc.adjustHorizon(self.current_horizon)
-        # horizon_changed = True if (self.current_horizon == self.last_horizon or self.last_horizon == None) else False
-        # Solve MPC  <<<<<<<<<<<<<< ADD CBF CUSTOM PREDICT HERE
+        self._update_closest_obstacles()
+
+        # Solve MPC
         t = time()
-        u = self.nmpc.solve(self.current_pos, self.cbf_per_obs)
+        u = self.nmpc.solve(self.current_pos, action)
         mpc_time = time() - t
-        
+
         # Update state and velocity
         self.current_pos = self.nmpc.stateHorizon[0,:]
         self.add_velocity(u[0])
         
         # Calculate reward and done
         reward, done = self._calculate_reward(self.current_pos, mpc_time)
-        # self.last_mpc_time = mpc_time
-        # self.last_horizon = self.current_horizon
 
         info = {
-            "u": u,
-            "mpc_time": mpc_time,
-            "horizon": self.current_horizon
-            # "collision": any(self.checkCollision(self.current_pos, obs)[0] for obs in self.map['obstacles']),
-            # "target_distance": np.linalg.norm(self.current_pos[:2] - self.map['target_pos'][:2])
-            }
+            "u": u
+        }
+        #     "mpc_time": mpc_time,
+        #     "horizon": self.current_horizon
+        #     # "collision": any(self.checkCollision(self.current_pos, obs)[0] for obs in self.map['obstacles']),
+        #     # "target_distance": np.linalg.norm(self.current_pos[:2] - self.map['target_pos'][:2])
+        #     }
 
         return self._get_obs(mpc_time), reward, done, False, info
 
     def _calculate_reward(self, position, mpc_time):
-        target_dist = np.linalg.norm(position[:2] - self.map['target_pos'][:2])
-        collision = any(self.checkCollision(position, obs)[0] for obs in self.map['obstacles'])
-        velocity = self.past_lin_vels[-1]  # Assuming position[3] contains velocity (add to observations)
         
         # Velocity rewards (maintain ~1 m/s)
+        velocity = self.past_lin_vels[-1]
         velocity_reward = np.exp(-2*(velocity - 1.0)**2)  # Gaussian peak at 1 m/s
         
         # MPC time rewards (piecewise function)
-        if mpc_time <= 0.05:
+        if mpc_time <= 0.025:
             time_reward = 5.0  # Max reward for fastest solves
-        elif mpc_time <= 0.1:
-            # Linear increase: 0.1s → 1.0, 0.05s → 5.0
-            time_reward = 1.0 + (5.0 - 1.0) * (0.1 - mpc_time)/(0.1 - 0.05)
-        elif mpc_time <= 0.25:
-            # Linear decay: 0.1s → 1.0 → 0.25s → 0.0
-            time_reward = 1.0 - (mpc_time - 0.1)/0.15  # Adjusted slope
-        elif mpc_time <= 1.0:
-            # Linear penalty: 0.25s → 0.0 → 1.0s → -3.0
-            time_reward = -3.0 * (mpc_time - 0.25)/0.75
+        elif mpc_time <= 0.50:
+            time_reward = -3.0 + (8.0) * (0.500 - mpc_time)/(0.5-0.025)
         else:
-            # Constant penalty beyond 1s
             time_reward = -3.0
-            
-        # Horizon efficiency bonus (encourage minimal sufficient horizons)
-        # horizon_efficiency = 0.2 * (1 / (horizon/10)) if horizon < 50 else 0.0
-        
+
+        # Check obstacle seperations
+        min_sep = 1e4
+        for obstacle in self.closest_obstacles:
+            vec = obstacle[:2] - self.current_pos[:2]
+            sep = np.linalg.norm(vec) - self.veh_rad - obstacle[2]
+            if sep < min_sep:
+                min_sep = sep
+
+        if min_sep <= 0.1:
+            close_penalty = max(-3.0 , -25.0* max(0, (0.105-min_sep)))
+        else:
+            close_penalty = 0.0
+
         # Collision penalty (keep severe)
+        collision = min_sep <= 0.0
         collision_penalty = 100.0 if collision else 0.0
         
-        # Progress reward (keep small since MPC handles progress)
-        progress_reward = 0.2 * (self.last_target_dist - target_dist) if self.last_target_dist else 0.0
+        # Progress reward
+        target_dist = np.linalg.norm(position[:2] - self.map['target_pos'][:2])
+        progress_reward = 1.5 * (self.last_target_dist - target_dist) if self.last_target_dist else 0.0
         
         # Deadlock penalty - if average velocity falls too low
         deadlock_penalty = 50.0 if len(self.past_lin_vels) >= 10 and self.av_lin_vel < 0.05 else 0
         
-        # Smoothness penalty (discourage frequent horizon changes)
-        # change_penalty = 0.8 if horizon_changed else 0.0
-        
-
         # Check and report terminal conditions
         at_target = target_dist < 0.5
         deadlock = True if deadlock_penalty > 0 else False
@@ -185,7 +195,7 @@ class MPCHorizonEnv(gym.Env):
             print(f"[FAIL] Collision")
         if at_target:
             print(f"[SUCCESS] At target!")
-            progress_reward += 10
+            progress_reward += 100
 
         done =  at_target or collision or deadlock
         self.last_target_dist = target_dist
@@ -193,11 +203,10 @@ class MPCHorizonEnv(gym.Env):
         total_reward = (
             velocity_reward
             + time_reward
-            # horizon_efficiency +
+            + close_penalty
             + progress_reward
             - collision_penalty
             - deadlock_penalty
-            # - change_penalty
         )
         return total_reward, done
     
