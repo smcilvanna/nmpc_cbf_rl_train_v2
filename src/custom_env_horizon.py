@@ -67,7 +67,6 @@ class MPCHorizonEnv(gym.Env):
         self.current_pos = np.array([0.0, 0.0, self.map['target_pos'][2]])
         self.nmpc.reset_nmpc(self.current_pos)
         self.cbf_per_obs = self.get_cbf_values(self.map['obstacles'])
-        print(self.cbf_per_obs, self.cbf_per_obs.shape)
         return self._get_obs(), {}
 
     def get_cbf_values(self,obstacles):
