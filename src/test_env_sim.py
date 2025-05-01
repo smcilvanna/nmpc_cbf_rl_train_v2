@@ -169,7 +169,7 @@ def plotSimdataAnimated(ep,env):
 if __name__ == "__main__":
     # Manual test configuration
     TEST_EPISODES = 1
-    MAX_STEPS = 400  # Reduce steps for easier debugging
+    MAX_STEPS = 1000  # Reduce steps for easier debugging
     PERSIST_STEPS = 10  # Test action persistence interval
     
     # Create wrapped environment
