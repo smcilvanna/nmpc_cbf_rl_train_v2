@@ -58,8 +58,6 @@ class MPCHorizonEnv(gym.Env):
         return 
 
     def reset(self, seed=None, options=None):
-        # self.last_horizon = None
-        # self.last_mpc_time = None
         # Generate new environment
         self.map = genCurEnv_2(curriculum_level=self.curriculum_level, 
                               gen_fig=True, maxObs=self.nmpc.nObs)
@@ -67,7 +65,17 @@ class MPCHorizonEnv(gym.Env):
         self.nmpc.setObstacles(self.map['obstacles'])
         self.nmpc.setTarget(self.map['target_pos'])
         self.current_pos = np.array([0.0, 0.0, self.map['target_pos'][2]])
+        self.nmpc.reset_nmpc(self.current_pos)
+        self.cbf_per_obs = self.get_cbf_values(self.map['obstacles'])
+        print(self.cbf_per_obs, self.cbf_per_obs.shape)
         return self._get_obs(), {}
+
+    def get_cbf_values(self,obstacles):
+        cbfs = []
+        for orad in obstacles[:,2]:
+            cbf = 1.0742 * np.exp(-2.0 * orad) + 0.0225
+            cbfs.extend([cbf])
+        return np.array(cbfs).reshape((1,-1))
 
     def _get_obs(self, mpc_time=0.0):
         """Simplified observation vector"""
@@ -106,7 +114,7 @@ class MPCHorizonEnv(gym.Env):
         # horizon_changed = True if (self.current_horizon == self.last_horizon or self.last_horizon == None) else False
         # Solve MPC  <<<<<<<<<<<<<< ADD CBF CUSTOM PREDICT HERE
         t = time()
-        u = self.nmpc.solve(self.current_pos, np.ones(20)*0.2)
+        u = self.nmpc.solve(self.current_pos, self.cbf_per_obs)
         mpc_time = time() - t
         
         # Update state and velocity
@@ -200,5 +208,7 @@ class MPCHorizonEnv(gym.Env):
         collision = safe_sep <= 0.0 
         return collision, safe_sep
 
+if __name__ == "__main__":
+    print("Custom Environment ClassDef")
 
 
