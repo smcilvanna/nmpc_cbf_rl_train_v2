@@ -204,8 +204,6 @@ class NMPC_CBF_MULTI_N:
         # self.ctrlHorizon = np.zeros((self.currentN,2))
         self.stateHorizon = np.repeat(currentPos, self.currentN+1, axis=0)
         self.ctrlHorizon = np.zeros((self.currentN,2))
-        
-        print(self.stateHorizon)
     
     def adjustHorizon(self, action):
         newIdx = self.indexOfN(action)
