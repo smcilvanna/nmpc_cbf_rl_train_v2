@@ -60,7 +60,7 @@ class MPCHorizonEnv(gym.Env):
     def reset(self, seed=None, options=None):
         # Generate new environment
         self.map = genCurEnv_2(curriculum_level=self.curriculum_level, 
-                              gen_fig=True, maxObs=self.nmpc.nObs)
+                              gen_fig=False, maxObs=self.nmpc.nObs)
         # Initialize MPC
         self.nmpc.setObstacles(self.map['obstacles'])
         self.nmpc.setTarget(self.map['target_pos'])
