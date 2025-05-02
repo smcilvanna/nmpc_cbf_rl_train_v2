@@ -6,6 +6,7 @@ src/.old/
 src/.temp/
 src/__pycache__/
 *.vscode/
+*tensorboard*/
 
 
 #Ignore file types
