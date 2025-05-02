@@ -18,3 +18,5 @@ src/__pycache__/
 *.log
 *temp*
 *.pkl
+*.zip
+*console.txt
