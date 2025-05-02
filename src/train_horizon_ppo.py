@@ -23,18 +23,23 @@ class CustomLoggingCallback(BaseCallback):
     
 # Curriculum schedule
 CURRICULUM_STAGES = [
-    {"level": 1, "steps": 1e4, "name": "basic"},
+    {"level": 1, "steps": 1e5, "name": "basic"},
     {"level": 2, "steps": 5e5, "name": "gates"},
     {"level": 3, "steps": 5e5, "name": "complex"}
 ]
 
+retrain = True
+
 def train():
-    model = None
+    if retrain:
+        model = PPO.load("ppo_mpc_horizon_ks_1-1_complex", device="cpu")
+    else:
+        model = None
     for stage in CURRICULUM_STAGES:
         # Create vectorized environments with ActionPersistenceWrapper
         env = make_vec_env(
             lambda: ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=stage["level"])), 
-            n_envs=4,
+            n_envs=15,
             vec_env_cls=SubprocVecEnv
         )
         
@@ -43,6 +48,7 @@ def train():
             model = PPO(
                 "MlpPolicy",
                 env,
+                device="cpu",
                 verbose=1,
                 tensorboard_log="./ppo_mpc_tensorboard/",  # Enable TensorBoard logging
                 learning_rate=3e-4,
@@ -65,7 +71,7 @@ def train():
         )
         
         # Save checkpoint
-        model.save(f"ppo_mpc_horizon_ks_1-1_{stage['name']}")
+        model.save(f"ppo_mpc_horizon_ks_1-2_{stage['name']}")
 
 if __name__ == "__main__":
     train()
