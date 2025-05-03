@@ -22,32 +22,52 @@ def plotSimdata(simdata,env):
 
     ax1.axis('square')
 
+    # # Simdata Spec
+    # log_row = env.current_pos.tolist()  # [0:3]     (3)
+    # log_row.extend(info["u"].tolist())  # [3:5]     (2)         5         6            7           8                  9        10        11       12         13        14         15        16
+    # log_row.extend(next_obs.tolist())   # [5:17]    (12)    [mpc_time, target_dist, target_sin, target_cos] + obs*(obs_dist, obs_sin, obs_cos  obs_rad) + (lin_vel ave_lin_vel, sin(yaw) cos(yaw))
+    # log_row.extend([reward])            # [17]      (1)
+    # log_row.extend([env.nmpc.currentN]) # [18]      (1)
+    # log_row.extend(action.tolist())     # [19]      (1)     Size of obsstacle_attention
+
     # Position Plot
     t = np.arange(simdata.shape[0]).reshape(-1, 1)
-    mpct = simdata[:,5]*1000
+    mpct = simdata[:,5]*1000     # scaled to ms
     x = simdata[:,0]
     y = simdata[:,1]
     th = simdata[:,2]
     v = simdata[:,3]
     w = simdata[:,4]
-    s = simdata[:,24] #simdata[:,7] 
+    r = simdata[:,17] #simdata[:,7] 
     # s[0] = s[1]
-    n = simdata[:,-4]
-    a = simdata[:,-3]
+    n = simdata[:,18]
+    a = simdata[:,19]
 
+    # XY position plot
     ax1.scatter(x, y,s=1)      # Plots y versus x as a line
     ax1.add_patch(Circle(simdata[-1,0:2], 0.55, color='black', alpha=0.9, label="vehicle"))
     ax1.add_patch(Circle(target[0:2], 0.2, color='green', alpha=0.9))
     for i in range(ob.shape[0]):
         ax1.add_patch(Circle( ob[i,0:2], ob[i,2], color='red')) 
 
+    # mpc time plot
     ax2.plot(t,mpct, label="mpc_time")
-    ax3.plot(t,s, label="reward")
-    ax3.plot(t,a, label="action")
-    # ax3.hlines(0,t[0],t[-1], colors='red')
+    
+    # reward plot
+    ax3.plot(t,r, label="reward")
+    
+    # vehicle controls plot
     ax4.plot(t,v, label="v (m/s)")
-    ax4.plot(t,w, label=r'$\omega$ (rad/s)')
+    ax4.set_ylim(-0.1,1.1)
+    ax4b = ax4.twinx()
+    ax4b.plot(t,w, label=r'$\omega$ (rad/s)', color='orange')
+    ax4b.set_ylim(-1,1)
+    
     ax5.plot(t,n, label="NMPC-N")
+    ax5.set_ylim(0, 100)
+    ax5b = ax5.twinx()
+    ax5b.plot(t, a, label="action", color='orange')
+    ax5b.set_ylim(0, 1)
 
     # Set axis limits for ax1
     lim = np.max(target[0:2])
@@ -62,9 +82,11 @@ def plotSimdata(simdata,env):
     ax3.set_xlabel('Simulation Step')
     ax3.set_ylabel('Reward')
     ax4.set_xlabel('Simulation Step')
-    ax4.set_ylabel('Velocity Controls')
+    ax4.set_ylabel('Linear Velocity')
+    ax4b.set_ylabel('Angular Velocity', color='orange')
     ax5.set_xlabel('Simulation Step')
-    ax5.set_ylabel('Solver Horizon')
+    ax5.set_ylabel('NMPC Horizon')
+    ax5b.set_ylabel('CBF Action', color='orange')
     plt.tight_layout()
 
     # plt.figure(2)
@@ -190,7 +212,7 @@ if __name__ == "__main__":
         cnt = -10
         while not done and step < MAX_STEPS:
             # Take random action (will only be applied every `PERSIST_STEPS` steps)
-            action = np.ones((3,))*(0.5 + cnt*0.0499)
+            action = np.ones((env.obstacle_attention,))*(0.5 + cnt*0.045)
             print(action)
             if cnt == 10:
                 cnt = -10
@@ -198,37 +220,18 @@ if __name__ == "__main__":
                 cnt += 1 
             next_obs, reward, done, _, info = env.step(action)
 
-            # # Track action changes
-            # if action != last_action:
-            #     print(f"\n[ACTION CHANGED] New action: {env.env.horizon_options[action]} (Step {step+1})")
-            #     last_action = action
-            #     action_counter = 0
-            # else:
-            #     action_counter += 1
-
-            # Logging (optional)
-            log_row = env.current_pos.tolist()  # [0:2]
-            log_row.extend(info["u"].tolist())  # [2:4]
-            log_row.extend(next_obs.tolist())   # [4:24]
-            log_row.extend([reward])            # [24]
-            log_row.extend([env.nmpc.currentN]) # [25]
-            log_row.extend(action.tolist())     # [26:29]
+            # Logging
+            log_row = env.current_pos.tolist()  # [0:3]     (3)
+            log_row.extend(info["u"].tolist())  # [3:5]     (2)
+            log_row.extend(next_obs.tolist())   # [5:17]    (12)    [mpc_time, target_dist, target_sin, target_cos] + obs*(obs_dist, obs_sin, obs_cos  obs_rad) + (lin_vel ave_lin_vel, sin(yaw) cos(yaw))
+            log_row.extend([reward])            # [17]      (1)
+            log_row.extend([env.nmpc.currentN]) # [18]      (1)
+            log_row.extend(action.tolist())     # [19]      (1)     Size of obsstacle_attention
             log.append(log_row)
 
             # Print step info
             print(f"\nStep {step+1}:")
-            # print(f"Action active: {env.env.horizon_options[last_action]} | N= {env.env.nmpc.currentN}")
-            # print(f"Reward: {reward:.2f}")
-            # print(f"MPC time: {next_obs[0]:.3f}s")
-            # print(f"Target distance: {next_obs[1]:.2f}m")
-            
-            # if done:
-            #     print("Episode terminated!")
-            #     if env.env.current_pos[0] < 0.5:
-            #         print("Reason: Reached target!")
-            #     else:
-            #         print("Reason: Collision detected!")
-            
+           
             step += 1
             obs = next_obs
     
