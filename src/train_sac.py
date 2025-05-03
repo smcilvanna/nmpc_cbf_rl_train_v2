@@ -9,8 +9,8 @@ from custom_env_horizon import MPCHorizonEnv
 
 # Curriculum schedule
 CURRICULUM_STAGES = [
-    {"level": 1, "steps": 5e5, "name": "basic"},
-    {"level": 2, "steps": 1e6, "name": "gates"}
+    {"level": 1, "steps": 15e5, "name": "basic"},
+    {"level": 2, "steps": 3e6, "name": "gates"}
     # {"level": 3, "steps": 5e5, "name": "complex"}
 ]
 
@@ -18,8 +18,13 @@ SAVE_DIR = "./models/"
 LOG_DIR = "./logs/"
 N_ENVS = 6  # Number of parallel environments
 
+retrain = True
+
 def train():
-    model = None
+    if retrain:
+        model = SAC.load('./sac_cbf_3x-1-1-final')
+    else:
+        model = None
     for stage in CURRICULUM_STAGES:
         # Create vectorized environments for current stage
         env = make_vec_env(
@@ -58,16 +63,16 @@ def train():
         # Train for current stage
         model.learn(
             total_timesteps=int(stage["steps"]),
-            callback=eval_callback,
+            # callback=eval_callback,
             # tb_log_name=f"sac_cbf_{stage['name']}",
             reset_num_timesteps=False
         )
 
         # Save stage checkpoint
-        model.save(os.path.join(SAVE_DIR, f"sac_cbf_3x-1-1-{stage['name']}"))
+        model.save(os.path.join(SAVE_DIR, f"sac_cbf_3x-1-2-{stage['name']}"))
 
     # Save final model
-    model.save(os.path.join(SAVE_DIR, "sac_cbf_3x-1-1-final"))
+    model.save(os.path.join(SAVE_DIR, "sac_cbf_3x-1-2-final"))
 
 if __name__ == "__main__":
     train()
