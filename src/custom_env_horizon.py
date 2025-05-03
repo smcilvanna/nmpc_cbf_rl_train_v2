@@ -31,7 +31,7 @@ class MPCHorizonEnv(gym.Env):
         # self.last_horizon = None
         self.current_horizon = None
         self.last_target_dist = []
-        self.last_action = None
+        self.last_action = np.zeros(3)
 
         # Curriculum parameters
         self.curriculum_level = curriculum_level
@@ -111,7 +111,7 @@ class MPCHorizonEnv(gym.Env):
         for obstacle in self.closest_obstacles:
             vec = obstacle[:2] - self.current_pos[:2]
             dist = np.linalg.norm(vec) - self.veh_rad - obstacle[2]
-            dist = np.clip(dist/10, 0.0, 1.0)   # Normalised [0-1] max 10 m
+            dist = np.clip(dist/50, 0.0, 1.0)   # Normalised [0-1] max 50 m
             angle = np.arctan2(vec[1], vec[0])
             obs_list.extend([dist, np.sin(angle), np.cos(angle), obstacle[2]])
 
@@ -193,11 +193,8 @@ class MPCHorizonEnv(gym.Env):
         deadlock_penalty = 20.0 if len(self.past_lin_vels) >= 10 and self.av_lin_vel < 0.05 else 0
         
         # Parameter change penalty
-        if self.last_action is not None:
-            param_change_penalty = 0.1 * np.linalg.norm(action - self.last_action)
-        else:
-            param_change_penalty = 0.0
-        self.last_action = action
+        param_change_penalty = 0.1 * np.linalg.norm(action - self.last_action, ord=2)
+        self.last_action = action.copy()
 
 
         # Check and report terminal conditions
@@ -234,5 +231,3 @@ class MPCHorizonEnv(gym.Env):
 
 if __name__ == "__main__":
     print("Custom Environment ClassDef")
-
-
