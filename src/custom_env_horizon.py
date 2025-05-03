@@ -44,7 +44,7 @@ class MPCHorizonEnv(gym.Env):
         self.action_space = gym.spaces.Box(
             low=0.0,
             high=1.0,
-            shape=(3,),
+            shape=(self.obstacle_attention,),
             dtype=np.float32
         )
         # 
@@ -54,10 +54,11 @@ class MPCHorizonEnv(gym.Env):
         # Limits                1s         50m                                      20m                         10m         
         # Normalised to        [0 1]      [0 1]       [-1 1]       [-1 1]          [0 1]     [-1 1]   [-1 1]   [0 1]       [0 1]    [0 1 ]      [-1 1]    [-1 1]
         
+        obs_size = 1 + 3 + (4 * self.obstacle_attention) + 2 + 2
         self.observation_space = gym.spaces.Box(
             low=-np.inf, 
             high=np.inf,
-            shape=(20,),
+            shape=(obs_size,),
             dtype=np.float32
         )
         
@@ -65,6 +66,10 @@ class MPCHorizonEnv(gym.Env):
         self.nmpc = NMPC_CBF_MULTI_N(0.1, self.horizon_options, nObs=self.obstacle_attention)
         self.veh_rad = self.nmpc.vehRad
         # self.reset()
+
+    def set_curriculum_level(self, level):
+        """Update curriculum level dynamically."""
+        self.curriculum_level = level
 
     def add_velocity(self,v):
         self.past_lin_vels.append(v)
