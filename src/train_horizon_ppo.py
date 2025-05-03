@@ -32,14 +32,14 @@ retrain = True
 
 def train():
     if retrain:
-        model = PPO.load("ppo_mpc_horizon_ks_1-1_complex", device="cpu")
+        model = PPO.load("ppo_mpc_horizon_ks_1-1_complex")
     else:
         model = None
     for stage in CURRICULUM_STAGES:
         # Create vectorized environments with ActionPersistenceWrapper
         env = make_vec_env(
             lambda: ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=stage["level"])), 
-            n_envs=15,
+            n_envs=12,
             vec_env_cls=SubprocVecEnv
         )
         
@@ -48,7 +48,7 @@ def train():
             model = PPO(
                 "MlpPolicy",
                 env,
-                device="cpu",
+                # device="cpu",
                 verbose=1,
                 tensorboard_log="./ppo_mpc_tensorboard/",  # Enable TensorBoard logging
                 learning_rate=3e-4,
