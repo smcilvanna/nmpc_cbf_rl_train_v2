@@ -31,6 +31,8 @@ class MPCHorizonEnv(gym.Env):
         # self.last_horizon = None
         self.current_horizon = None
         self.last_target_dist = []
+        self.last_action = None
+
         # Curriculum parameters
         self.curriculum_level = curriculum_level
         self.horizon_options = [30]  # 10-100 in steps of 5
@@ -48,6 +50,9 @@ class MPCHorizonEnv(gym.Env):
         #                                                                            8         9       10       11
         #                       0           1           2           3                4         5        6        7          16        17          18       19
         # Observation space: [mpc_time, target_dist, target_sin, target_cos] + 3*(obs_dist, obs_sin, obs_cos  obs_rad) + (lin_vel ave_lin_vel, sin(yaw) cos(yaw))
+        # Limits                1s         50m                                      20m                         10m         
+        # Normalised to        [0 1]      [0 1]       [-1 1]       [-1 1]          [0 1]     [-1 1]   [-1 1]   [0 1]       [0 1]    [0 1 ]      [-1 1]    [-1 1]
+        
         self.observation_space = gym.spaces.Box(
             low=-np.inf, 
             high=np.inf,
@@ -93,11 +98,12 @@ class MPCHorizonEnv(gym.Env):
         obs_list = []
         
         # 1. MPC performance [0]
-        obs_list.append(mpc_time)
+        obs_list.append(np.clip(mpc_time,0.0,1.0))  # Normalised [0-1] max 1 second
         
         # 2. Target information [1:4]
         target_vec = self.map['target_pos'][:2] - self.current_pos[:2]
         target_dist = np.linalg.norm(target_vec)
+        target_dist = np.clip(target_dist/50,0.0,1.0)   # Normalised [0-1] max 50m
         target_angle = np.arctan2(target_vec[1], target_vec[0])
         obs_list.extend([target_dist, np.sin(target_angle), np.cos(target_angle)])
         
@@ -105,6 +111,7 @@ class MPCHorizonEnv(gym.Env):
         for obstacle in self.closest_obstacles:
             vec = obstacle[:2] - self.current_pos[:2]
             dist = np.linalg.norm(vec) - self.veh_rad - obstacle[2]
+            dist = np.clip(dist/10, 0.0, 1.0)   # Normalised [0-1] max 10 m
             angle = np.arctan2(vec[1], vec[0])
             obs_list.extend([dist, np.sin(angle), np.cos(angle), obstacle[2]])
 
@@ -147,7 +154,7 @@ class MPCHorizonEnv(gym.Env):
 
         return self._get_obs(mpc_time), reward, done, False, info
 
-    def _calculate_reward(self, position, mpc_time):
+    def _calculate_reward(self, position, mpc_time, action):
         
         # Velocity rewards (maintain ~1 m/s)
         velocity = self.past_lin_vels[-1]
@@ -176,15 +183,23 @@ class MPCHorizonEnv(gym.Env):
 
         # Collision penalty (keep severe)
         collision = min_sep <= 0.0
-        collision_penalty = 100.0 if collision else 0.0
+        collision_penalty = 50.0 if collision else 0.0
         
         # Progress reward
         target_dist = np.linalg.norm(position[:2] - self.map['target_pos'][:2])
         progress_reward = 1.5 * (self.last_target_dist - target_dist) if self.last_target_dist else 0.0
         
         # Deadlock penalty - if average velocity falls too low
-        deadlock_penalty = 50.0 if len(self.past_lin_vels) >= 10 and self.av_lin_vel < 0.05 else 0
+        deadlock_penalty = 20.0 if len(self.past_lin_vels) >= 10 and self.av_lin_vel < 0.05 else 0
         
+        # Parameter change penalty
+        if self.last_action is not None:
+            param_change_penalty = 0.1 * np.linalg.norm(action - self.last_action)
+        else:
+            param_change_penalty = 0.0
+        self.last_action = action
+
+
         # Check and report terminal conditions
         at_target = target_dist < 0.5
         deadlock = True if deadlock_penalty > 0 else False
@@ -195,7 +210,7 @@ class MPCHorizonEnv(gym.Env):
             print(f"[FAIL] Collision")
         if at_target:
             print(f"[SUCCESS] At target!")
-            progress_reward += 100
+            progress_reward += 15
 
         done =  at_target or collision or deadlock
         self.last_target_dist = target_dist
@@ -207,6 +222,7 @@ class MPCHorizonEnv(gym.Env):
             + progress_reward
             - collision_penalty
             - deadlock_penalty
+            - param_change_penalty
         )
         return total_reward, done
     
