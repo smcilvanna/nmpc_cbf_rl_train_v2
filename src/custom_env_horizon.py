@@ -139,7 +139,11 @@ class MPCHorizonEnv(gym.Env):
 
         # Solve MPC
         t = time()
-        u = self.nmpc.solve(self.current_pos, action)
+        try:
+            u = self.nmpc.solve(self.current_pos, action)
+        except:
+            print("[WARN] Solver Fail Controller Output Zeroed")
+            u = np.zeros(2)
         mpc_time = time() - t
 
         # Update state and velocity
