@@ -32,6 +32,7 @@ class MPCHorizonEnv(gym.Env):
         self.current_horizon = None
         self.last_target_dist = []
         self.last_action = np.zeros(3)
+        self.obstacle_attention = 1
 
         # Curriculum parameters
         self.curriculum_level = curriculum_level
@@ -46,10 +47,10 @@ class MPCHorizonEnv(gym.Env):
             shape=(3,),
             dtype=np.float32
         )
-        #                                                                           12        13       14       15
-        #                                                                            8         9       10       11
-        #                       0           1           2           3                4         5        6        7          16        17          18       19
-        # Observation space: [mpc_time, target_dist, target_sin, target_cos] + 3*(obs_dist, obs_sin, obs_cos  obs_rad) + (lin_vel ave_lin_vel, sin(yaw) cos(yaw))
+        # 
+        #
+        #                       0           1           2           3                  4         5        6        7          8        9          10       11
+        # Observation space: [mpc_time, target_dist, target_sin, target_cos] + obs*(obs_dist, obs_sin, obs_cos  obs_rad) + (lin_vel ave_lin_vel, sin(yaw) cos(yaw))
         # Limits                1s         50m                                      20m                         10m         
         # Normalised to        [0 1]      [0 1]       [-1 1]       [-1 1]          [0 1]     [-1 1]   [-1 1]   [0 1]       [0 1]    [0 1 ]      [-1 1]    [-1 1]
         
@@ -61,7 +62,7 @@ class MPCHorizonEnv(gym.Env):
         )
         
         # MPC system
-        self.nmpc = NMPC_CBF_MULTI_N(0.1, self.horizon_options, nObs=3)
+        self.nmpc = NMPC_CBF_MULTI_N(0.1, self.horizon_options, nObs=self.obstacle_attention)
         self.veh_rad = self.nmpc.vehRad
         # self.reset()
 
@@ -141,7 +142,7 @@ class MPCHorizonEnv(gym.Env):
         self.add_velocity(u[0])
         
         # Calculate reward and done
-        reward, done = self._calculate_reward(self.current_pos, mpc_time)
+        reward, done = self._calculate_reward(self.current_pos, mpc_time, action)
 
         info = {
             "u": u
