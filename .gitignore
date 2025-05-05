@@ -12,7 +12,7 @@ src/__pycache__/
 #Ignore file types
 *.jpg
 *.bag
-*.old
+*.old*
 *.pyc
 *.swp
 *.log
