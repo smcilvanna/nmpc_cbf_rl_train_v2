@@ -334,24 +334,17 @@ def place_obstacles(start_pose, radii, dist_to_gap, offset_perp, gap_size):
 
 
 if __name__ == "__main__":
-    # Test all curriculum levels
-    # for level in range(5, 6):
-    #     try:
-    #         env = generate_curriculum_environment(level, gen_fig=True)
-    #         plt.title(f"Curriculum Level {level}")
-    #         plt.show()
-    #         print(f"Level {level} obstacles:\n{env['obstacles']}")
-    #     except Exception as e:
-    #         print(f"Error generating level {level}: {str(e)}")
+    clevel = 2
+    env = genCurEnv_2(curriculum_level=clevel , gen_fig=True)
 
-    # env = generate_curriculum_environment(2, gen_fig=True)
-    # plt.show()
-
-    env = genCurEnv_2(curriculum_level=1 , gen_fig=True)
-
-    input("ENTER to save file")
+    mapid = None
+    while mapid is None or int(mapid) < 0:
+        mapid = input("ENTER to save file")
+        savename = f'env-{clevel}-{mapid}.pkl'
+        input(f'[SAVE] File : {savename}')
+    
     # Save to file
-    with open('env1-1.pkl', 'wb') as f:
+    with open(savename, 'wb') as f:
         pickle.dump(env, f)
 
 
