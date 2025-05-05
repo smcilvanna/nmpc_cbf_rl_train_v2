@@ -57,10 +57,13 @@ class MPCHorizonEnv(gym.Env):
         self.av_lin_vel = sum(self.past_lin_vels)/len(self.past_lin_vels)
         return 
 
-    def reset(self, seed=None, options=None):
+    def reset(self, map=None, seed=None, options=None):
         # Generate new environment
-        self.map = genCurEnv_2(curriculum_level=self.curriculum_level, 
-                              gen_fig=False, maxObs=self.nmpc.nObs)
+        if map == None:
+            self.map = genCurEnv_2(curriculum_level=self.curriculum_level, 
+                                       gen_fig=False, maxObs=self.nmpc.nObs)
+        else:
+            self.map = map        
         # Initialize MPC
         self.nmpc.setObstacles(self.map['obstacles'])
         self.nmpc.setTarget(self.map['target_pos'])
