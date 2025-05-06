@@ -162,18 +162,21 @@ class MPCHorizonEnv(gym.Env):
         else:
             # Constant penalty beyond 1s
             time_reward = -3.0
+
+        if time_reward > 0:
+            time_reward = time_reward/4
             
         # Horizon efficiency bonus (encourage minimal sufficient horizons)
         # horizon_efficiency = 0.2 * (1 / (horizon/10)) if horizon < 50 else 0.0
         
         # Collision penalty (keep severe)
-        collision_penalty = 100.0 if collision else 0.0
+        collision_penalty = 200.0 if collision else 0.0
         
         # Progress reward (keep small since MPC handles progress)
         progress_reward = 0.2 * (self.last_target_dist - target_dist) if self.last_target_dist else 0.0
         
         # Deadlock penalty - if average velocity falls too low
-        deadlock_penalty = 50.0 if len(self.past_lin_vels) >= 10 and self.av_lin_vel < 0.05 else 0
+        deadlock_penalty = 100.0 if len(self.past_lin_vels) >= 10 and self.av_lin_vel < 0.05 else 0
         
         # Smoothness penalty (discourage frequent horizon changes)
         # change_penalty = 0.8 if horizon_changed else 0.0
