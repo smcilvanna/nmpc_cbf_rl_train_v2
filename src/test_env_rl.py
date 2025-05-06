@@ -32,7 +32,7 @@ def plotSimdata(simdata,env):
     th = simdata[:,2]
     v = simdata[:,3]
     w = simdata[:,4]
-    s = simdata[:,-2] #simdata[:,7] 
+    r = simdata[:,-2] #simdata[:,7] 
     # s[0] = s[1]
     n = simdata[:,-1]
 
@@ -43,7 +43,7 @@ def plotSimdata(simdata,env):
         ax1.add_patch(Circle( ob[i,0:2], ob[i,2], color='red')) 
 
     ax2.plot(t,mpct, label="mpc_time")
-    ax3.plot(t,s, label="reward")
+    ax3.plot(t,r, label="reward")
     # ax3.hlines(0,t[0],t[-1], colors='red')
     ax4.plot(t,v, label="v (m/s)")
     ax4.plot(t,w, label=r'$\omega$ (rad/s)')
@@ -191,7 +191,7 @@ if __name__ == "__main__":
     log = []
     while not done and step < MAX_STEPS:
         # Take random action (will only be applied every `PERSIST_STEPS` steps)
-        action, _ = model.predict(obs) #env.action_space.sample()
+        action, _ = model.predict(obs, deterministic=True) #env.action_space.sample()
         next_obs, reward, done, _, info = env.step(action)
 
         # Logging for plots
@@ -208,6 +208,11 @@ if __name__ == "__main__":
         step += 1
         obs = next_obs
 
+
 # Plot run
 simdata = np.array(log)
+
+print(f"Total Reward : {np.sum(simdata[:,-2])}")
+print(f"Rewards Before Terminal : {np.sum(simdata[:-1,-2])}")
+
 plotSimdata(simdata,env.env.map)
