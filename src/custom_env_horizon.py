@@ -151,7 +151,7 @@ class MPCHorizonEnv(gym.Env):
         self.add_velocity(u[0])
         
         # Calculate reward and done
-        reward, done = self._calculate_reward(self.current_pos, mpc_time, action)
+        reward, done = self._calculate_reward(self.current_pos, mpc_time, action, u)
 
         info = {
             "u": u
@@ -164,12 +164,17 @@ class MPCHorizonEnv(gym.Env):
 
         return self._get_obs(mpc_time), reward, done, False, info
 
-    def _calculate_reward(self, position, mpc_time, action):
+    def _calculate_reward(self, position, mpc_time, action, u):
         
         # Velocity rewards (maintain ~1 m/s)
         velocity = self.past_lin_vels[-1]
         velocity_reward = np.exp(-2*(velocity - 1.0)**2)  # Gaussian peak at 1 m/s
         velocity_reward = velocity_reward*2 -1
+
+        if u[0] == 0.0:
+            solverpen = 10.0
+        else:
+            solverpen = 0.0
         
         # MPC time rewards (piecewise function)
         if mpc_time <= 0.025:
@@ -236,6 +241,7 @@ class MPCHorizonEnv(gym.Env):
             - collision_penalty
             - deadlock_penalty
             - param_change_penalty
+            - solverpen
         )
         return total_reward, done
     
