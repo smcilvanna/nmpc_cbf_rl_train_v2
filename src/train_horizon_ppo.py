@@ -28,7 +28,7 @@ CURRICULUM_STAGES = [
     # {"level": 3, "steps": 5e5, "name": "complex"}
 ]
 
-retrain = True
+retrain = False
 
 def train():
     if retrain:
@@ -71,7 +71,7 @@ def train():
         )
         
         # Save checkpoint
-        model.save(f"ppo_mpc_horizon_ks_1-2_{stage['name']}")
+        model.save(f"ppo_mpc_horizon_ks_2-1_{stage['name']}")
 
 if __name__ == "__main__":
     train()
