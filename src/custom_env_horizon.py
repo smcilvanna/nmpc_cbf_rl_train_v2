@@ -19,10 +19,10 @@ class ActionPersistenceWrapper(gym.Wrapper):
         self.steps_since_change += 1
         return super().step(self.current_action)
 
-    def reset(self, **kwargs):
+    def reset(self, map=None, **kwargs):
         self.steps_since_change = self.persist_steps  # Reset to trigger action on first step
         self.current_action = 0  # Reset action to default
-        return super().reset(**kwargs)
+        return self.env.reset(map=map, **kwargs)
 
 
 class MPCHorizonEnv(gym.Env):
@@ -57,13 +57,14 @@ class MPCHorizonEnv(gym.Env):
         self.av_lin_vel = sum(self.past_lin_vels)/len(self.past_lin_vels)
         return 
 
-    def reset(self, map=None, seed=None, options=None):
+    def reset(self, map=None , seed=None, options=None):
         # Generate new environment
         if map == None:
             self.map = genCurEnv_2(curriculum_level=self.curriculum_level, 
                                        gen_fig=False, maxObs=self.nmpc.nObs)
         else:
-            self.map = map        
+            print('Loading Saved Map')
+            self.map = map
         # Initialize MPC
         self.nmpc.setObstacles(self.map['obstacles'])
         self.nmpc.setTarget(self.map['target_pos'])

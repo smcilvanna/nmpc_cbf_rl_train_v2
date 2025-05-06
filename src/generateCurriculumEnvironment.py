@@ -335,11 +335,11 @@ def place_obstacles(start_pose, radii, dist_to_gap, offset_perp, gap_size):
 
 if __name__ == "__main__":
     clevel = 2
-    env = genCurEnv_2(curriculum_level=clevel , gen_fig=True)
+    env = genCurEnv_2(curriculum_level=clevel , gen_fig=True, maxObs=20)
 
     mapid = None
     while mapid is None or int(mapid) < 0:
-        mapid = input("ENTER to save file")
+        mapid = input(f"What ID to set for level {clevel} map file? : ")
         savename = f'env-{clevel}-{mapid}.pkl'
         input(f'[SAVE] File : {savename}')
     

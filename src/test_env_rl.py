@@ -4,6 +4,7 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.animation import FuncAnimation
 import pickle
+from stable_baselines3 import PPO
 
 
 def plotSimdata(simdata,env):
@@ -174,20 +175,23 @@ if __name__ == "__main__":
     
     # Create wrapped environment
     env = ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=2), persist_steps=PERSIST_STEPS)
-    map = pickle.load('./env-1-1.pkl')
+    with open('./env-1-1.pkl', 'rb') as f: 
+        map = pickle.load(f)
 
-    obs, _ = env.reset(map)
+    obs, _ = env.reset(map=map)
     done = False
     step = 0
     last_action = None
     action_counter = 0
     
-    print(f"\n=== Episode {ep+1} ===")
-    print(f"Initial observation: {obs[:4]}... (truncated)")
+    # Load Horizon Prediction Model
+    model = PPO.load("../../train_data/horizon_only/ppo_mpc_horizon_ks_1-3d_complex")
+
+    # print(f"Initial observation: {obs[:4]}... (truncated)")
     log = []
     while not done and step < MAX_STEPS:
         # Take random action (will only be applied every `PERSIST_STEPS` steps)
-        action = env.action_space.sample()
+        action, _ = model.predict(obs) #env.action_space.sample()
         next_obs, reward, done, _, info = env.step(action)
 
         # Logging for plots
