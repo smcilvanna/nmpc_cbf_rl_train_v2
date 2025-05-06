@@ -23,9 +23,9 @@ class CustomLoggingCallback(BaseCallback):
     
 # Curriculum schedule
 CURRICULUM_STAGES = [
-    {"level": 1, "steps": 1e5, "name": "basic"},
-    {"level": 2, "steps": 5e5, "name": "gates"},
-    {"level": 3, "steps": 5e5, "name": "complex"}
+    {"level": 1, "steps": 5e5, "name": "basic"},
+    {"level": 2, "steps": 3e6, "name": "trap"},
+    # {"level": 3, "steps": 5e5, "name": "complex"}
 ]
 
 retrain = True
@@ -50,7 +50,7 @@ def train():
                 env,
                 # device="cpu",
                 verbose=1,
-                tensorboard_log="./ppo_mpc_tensorboard/",  # Enable TensorBoard logging
+                # tensorboard_log="./ppo_mpc_tensorboard/",  # Enable TensorBoard logging
                 learning_rate=3e-4,
                 n_steps=512,
                 batch_size=64,
@@ -66,8 +66,8 @@ def train():
          # Train with custom callback
         model.learn(
             total_timesteps=int(stage["steps"]),
-            callback=CustomLoggingCallback(),  # Add callback
-            tb_log_name=f"curriculum_{stage['name']}"  # Unique log name per stage
+            # callback=CustomLoggingCallback(),  # Add callback
+            # tb_log_name=f"curriculum_{stage['name']}"  # Unique log name per stage
         )
         
         # Save checkpoint
