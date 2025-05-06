@@ -237,4 +237,8 @@ if __name__ == "__main__":
     
     # Plot run
     simdata = np.array(log)
+    
+    print(f"Total Reward : {np.sum(simdata[:,17])}")
+    print(f"Rewards Before Terminal : {np.sum(simdata[:-1,17])}")
+
     plotSimdata(simdata,env.map)
