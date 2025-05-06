@@ -31,7 +31,7 @@ class MPCHorizonEnv(gym.Env):
         # self.last_horizon = None
         self.current_horizon = None
         self.last_target_dist = []
-        self.last_action = np.zeros(3)
+        self.last_action = np.zeros(1)
         self.obstacle_attention = 1
 
         # Curriculum parameters
@@ -79,7 +79,7 @@ class MPCHorizonEnv(gym.Env):
     def reset(self, seed=None, options=None):
         # Generate new environment
         self.map = genCurEnv_2(curriculum_level=self.curriculum_level, 
-                              gen_fig=False, maxObs=20)
+                              gen_fig=True, maxObs=20)
         # Initialize MPC
         self.nmpc.setTarget(self.map['target_pos'])
         self.current_pos = np.array([0.0, 0.0, self.map['target_pos'][2]])
@@ -169,6 +169,7 @@ class MPCHorizonEnv(gym.Env):
         # Velocity rewards (maintain ~1 m/s)
         velocity = self.past_lin_vels[-1]
         velocity_reward = np.exp(-2*(velocity - 1.0)**2)  # Gaussian peak at 1 m/s
+        velocity_reward = velocity_reward*2 -1
         
         # MPC time rewards (piecewise function)
         if mpc_time <= 0.025:
@@ -177,6 +178,11 @@ class MPCHorizonEnv(gym.Env):
             time_reward = -3.0 + (8.0) * (0.500 - mpc_time)/(0.5-0.025)
         else:
             time_reward = -3.0
+
+        if time_reward > 0:
+            time_reward /= 4
+        elif time_reward < 0:
+            time_reward /= 2
 
         # Check obstacle seperations
         min_sep = 1e4
@@ -193,17 +199,17 @@ class MPCHorizonEnv(gym.Env):
 
         # Collision penalty (keep severe)
         collision = min_sep <= 0.0
-        collision_penalty = 50.0 if collision else 0.0
+        collision_penalty = 2000.0 if collision else 0.0
         
         # Progress reward
         target_dist = np.linalg.norm(position[:2] - self.map['target_pos'][:2])
-        progress_reward = 1.5 * (self.last_target_dist - target_dist) if self.last_target_dist else 0.0
+        progress_reward = 1.0 * (self.last_target_dist - target_dist) if self.last_target_dist else 0.0
         
         # Deadlock penalty - if average velocity falls too low
-        deadlock_penalty = 20.0 if len(self.past_lin_vels) >= 10 and self.av_lin_vel < 0.05 else 0
+        deadlock_penalty = 1000.0 if len(self.past_lin_vels) >= 10 and self.av_lin_vel < 0.05 else 0
         
         # Parameter change penalty
-        param_change_penalty = 0.1 * np.linalg.norm(action - self.last_action, ord=2)
+        param_change_penalty = 10 * np.linalg.norm(action - self.last_action, ord=2) if self.last_action != 0.0 else 0.0
         self.last_action = action.copy()
 
 
