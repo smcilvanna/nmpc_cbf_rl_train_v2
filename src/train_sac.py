@@ -9,16 +9,18 @@ from custom_env_horizon import MPCHorizonEnv
 
 # Curriculum schedule
 CURRICULUM_STAGES = [
-    {"level": 1, "steps": 15e5, "name": "basic"},
-    {"level": 2, "steps": 3e6, "name": "gates"}
+    {"level": 1, "steps": 2e6, "name": "basic"},
+    {"level": 2, "steps": 2e6, "name": "gates"}
     # {"level": 3, "steps": 5e5, "name": "complex"}
 ]
 
-SAVE_DIR = "./models/"
-LOG_DIR = "./logs/"
+retrain = False
+trainid = 2
+retrainid = 1
+SAVE_DIR = f".train_data/train{trainid}/models{trainid}/"
+LOG_DIR =  f".train_data/train{trainid}/logs{trainid}/"
 N_ENVS = 6  # Number of parallel environments
 
-retrain = True
 
 def train():
     if retrain:
@@ -69,10 +71,10 @@ def train():
         )
 
         # Save stage checkpoint
-        model.save(os.path.join(SAVE_DIR, f"sac_cbf_3x-1-4-{stage['name']}"))
+        model.save(os.path.join(SAVE_DIR, f"sac_cbf_3x-{trainid}-{retrainid}-{stage['name']}"))
 
     # Save final model
-    model.save(os.path.join(SAVE_DIR, "sac_cbf_3x-1-4-final"))
+    model.save(os.path.join(SAVE_DIR, f"sac_cbf_3x-{trainid}-{retrainid}-final"))
 
 if __name__ == "__main__":
     train()
