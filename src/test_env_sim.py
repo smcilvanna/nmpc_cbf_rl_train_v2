@@ -197,7 +197,7 @@ if __name__ == "__main__":
     # PERSIST_STEPS = 10  # Test action persistence interval
     
     # Create wrapped environment
-    env = MPCHorizonEnv(curriculum_level=1)
+    env = MPCHorizonEnv(curriculum_level=2)
     
     for ep in range(TEST_EPISODES):
         obs, _ = env.reset()

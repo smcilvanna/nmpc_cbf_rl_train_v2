@@ -22,7 +22,7 @@ retrain = True
 
 def train():
     if retrain:
-        model = SAC.load('./sac_cbf_3x-1-1-final')
+        model = SAC.load('./sac_cbf_3x-1-3-final')
     else:
         model = None
     for stage in CURRICULUM_STAGES:
@@ -69,10 +69,10 @@ def train():
         )
 
         # Save stage checkpoint
-        model.save(os.path.join(SAVE_DIR, f"sac_cbf_3x-1-2-{stage['name']}"))
+        model.save(os.path.join(SAVE_DIR, f"sac_cbf_3x-1-4-{stage['name']}"))
 
     # Save final model
-    model.save(os.path.join(SAVE_DIR, "sac_cbf_3x-1-2-final"))
+    model.save(os.path.join(SAVE_DIR, "sac_cbf_3x-1-4-final"))
 
 if __name__ == "__main__":
     train()
