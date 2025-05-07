@@ -204,7 +204,7 @@ if __name__ == "__main__":
     MAX_STEPS = 500  # Reduce steps for easier debugging
     
     # Create wrapped environment
-    env = MPCHorizonEnv(curriculum_level=2)
+    env = MPCHorizonEnv(curriculum_level=1)
     
     obs, _ = env.reset()
     done = False
@@ -222,7 +222,7 @@ if __name__ == "__main__":
     if select_model:
         model = SAC.load(select_file())
     else:
-        model = SAC.load("train_data/train1/models4/sac_cbf_3x-1-4-gates.zip")
+        model = SAC.load("/home/sm/Documents/python/husky/nmpc_cbf_rl_train_v2_cbf_only/src/train_data/train2/models1/sac_cbf_3x-2-1-final.zip")
 
     while not done and step < MAX_STEPS:
         # Use Model To Set Actions (cbf parameters)

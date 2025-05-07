@@ -79,7 +79,7 @@ class MPCHorizonEnv(gym.Env):
     def reset(self, seed=None, options=None):
         # Generate new environment
         self.map = genCurEnv_2(curriculum_level=self.curriculum_level, 
-                              gen_fig=True, maxObs=20)
+                              gen_fig=False, maxObs=20)
         # Initialize MPC
         self.nmpc.setTarget(self.map['target_pos'])
         self.current_pos = np.array([0.0, 0.0, self.map['target_pos'][2]])
