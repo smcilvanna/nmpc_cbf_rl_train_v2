@@ -23,16 +23,19 @@ class CustomLoggingCallback(BaseCallback):
     
 # Curriculum schedule
 CURRICULUM_STAGES = [
-    {"level": 1, "steps": 5e5, "name": "basic"},
-    {"level": 2, "steps": 3e6, "name": "trap"},
+    {"level": 1, "steps": 1e5, "name": "basic"},
+    {"level": 2, "steps": 5e6, "name": "trap"},
     # {"level": 3, "steps": 5e5, "name": "complex"}
 ]
 
-retrain = False
+retrain = True
+train_id = 2
+retrain_id = 2
+
 
 def train():
     if retrain:
-        model = PPO.load("ppo_mpc_horizon_ks_1-1_complex")
+        model = PPO.load(f"ppo_mpc_horizon_ks_{train_id}-{retrain_id-1}_trap")
     else:
         model = None
     for stage in CURRICULUM_STAGES:
@@ -71,7 +74,7 @@ def train():
         )
         
         # Save checkpoint
-        model.save(f"ppo_mpc_horizon_ks_2-1_{stage['name']}")
+        model.save(f"ppo_mpc_horizon_ks_{train_id}-{retrain_id}_{stage['name']}")
 
 if __name__ == "__main__":
     train()
