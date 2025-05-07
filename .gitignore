@@ -8,6 +8,8 @@ src/__pycache__/
 *.vscode/
 *logs/
 *model*/
+train_data/
+
 
 #Ignore file types
 *.jpg
