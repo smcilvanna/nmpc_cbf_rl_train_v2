@@ -33,7 +33,7 @@ class MPCHorizonEnv(gym.Env):
         self.last_target_dist = []
         # Curriculum parameters
         self.curriculum_level = curriculum_level
-        self.horizon_options = list(range(10, 101, 10))  # 10-100 in steps of 10 #changed from 5
+        self.horizon_options = list(range(10, 201, 20))  # 10-100 in steps of 10 #changed from 5
         self.past_lin_vels = deque(maxlen=10)
         self.av_lin_vel = 0
 
@@ -77,7 +77,7 @@ class MPCHorizonEnv(gym.Env):
     def get_cbf_values(self,obstacles):
         cbfs = []
         for orad in obstacles[:,2]:
-            cbf = 20 #1.0742 * np.exp(-2.0 * orad) + 0.0225 
+            cbf = 1.0742 * np.exp(-2.0 * orad) + 0.0225 
             cbfs.extend([cbf])
         return np.array(cbfs).reshape((1,-1))
 
@@ -117,8 +117,11 @@ class MPCHorizonEnv(gym.Env):
         return np.array(obs_list, dtype=np.float32), min_obs_dist
 
     def step(self, action):
-        self.current_horizon = self.horizon_options[action]
-        self.nmpc.adjustHorizon(self.current_horizon)
+        # If horizon action changes current horizon adjust it in nmpc
+        if self.current_horizon != self.horizon_options[action]:
+            self.current_horizon = self.horizon_options[action]
+            self.nmpc.adjustHorizon(self.current_horizon, self.current_pos)
+            print("Horizon Changed")
         # horizon_changed = True if (self.current_horizon == self.last_horizon or self.last_horizon == None) else False
         # Solve MPC  <<<<<<<<<<<<<< ADD CBF CUSTOM PREDICT HERE
         t = time()

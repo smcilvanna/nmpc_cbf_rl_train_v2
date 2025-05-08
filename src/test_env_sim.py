@@ -171,21 +171,23 @@ def plotSimdataAnimated(ep,env):
 if __name__ == "__main__":
     # Manual test configuration
     TEST_EPISODES = 1
-    MAX_STEPS = 1000  # Reduce steps for easier debugging
+    MAX_STEPS = 500  # Reduce steps for easier debugging
     PERSIST_STEPS = 10  # Test action persistence interval
     
     # Create wrapped environment
     env = ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=2), persist_steps=PERSIST_STEPS)
-    with open('./env-2-4.pkl', 'rb') as f: 
+    with open('./env-2-3.pkl', 'rb') as f: 
         map = pickle.load(f)
 
-    # Plot figure for loop
-    plt.ion()  # Enable interactive mode
-    figlive, ax = plt.subplots()
-    line, = ax.plot([], [], 'r--')  # Empty line object
-    ax.set_xlabel('X Position')
-    ax.set_ylabel('Y Position')
-    ax.grid(True)
+    liveplot = True
+    if liveplot:
+        # Plot figure for loop
+        plt.ion()  # Enable interactive mode
+        figlive, ax = plt.subplots()
+        line, = ax.plot([], [], 'r--')  # Empty line object
+        ax.set_xlabel('X Position')
+        ax.set_ylabel('Y Position')
+        ax.grid(True)
 
     
     
@@ -196,9 +198,6 @@ if __name__ == "__main__":
         last_action = None
         action_counter = 0
 
-        ob = env.env.map['obstacles'][0:3,:]
-        for i in range(ob.shape[0]):
-            ax.add_patch(Circle( ob[i,0:2], ob[i,2], color='red'))
         
         print(f"\n=== Episode {ep+1} ===")
         print(f"Initial observation: {obs[:4]}... (truncated)")
@@ -207,25 +206,31 @@ if __name__ == "__main__":
         while not done and step < MAX_STEPS:
             # Take  action that sets horizon length (will only be applied every `PERSIST_STEPS` steps)
             # action = env.action_space.sample() #if env.env.min_obs_dist > 10 else 9
-            action = 8
-            if step == 120:
-                env.env.nmpc.reset_nmpc(env.env.current_pos)
-                print("Reset predicted states")
+            # action = 1
+            if step == 110:
+                action = 9
+                print("CHANGE ACTION")
             next_obs, reward, done, _, info = env.step(action)
-
             projected_states = env.env.nmpc.stateHorizon[:,0:2]
-            # Update plot
-            ax.set_title(f"Horizon Projection (N={env.env.nmpc.currentN})")
-            line.set_data(projected_states[:,0], projected_states[:,1])
-            line.set_linewidth(1)
-            # Adjust view limits
-            current_pos = env.env.current_pos[:2]
-            ax.set_xlim(0, 30)
-            ax.set_ylim(0, 30)
-            # Redraw and brief pause
-            figlive.canvas.draw()
-            figlive.canvas.flush_events()
-            plt.pause(0.001)  # Small pause to allow GUI update
+            
+            
+            if liveplot:
+                ob = env.env.map['obstacles'][0:3,:]
+                for i in range(ob.shape[0]):
+                    ax.add_patch(Circle( ob[i,0:2], ob[i,2], color='red'))
+            
+                # Update plot
+                ax.set_title(f"Horizon Projection (N={env.env.nmpc.currentN})")
+                line.set_data(projected_states[:,0], projected_states[:,1])
+                line.set_linewidth(1)
+                # Adjust view limits
+                current_pos = env.env.current_pos[:2]
+                ax.set_xlim(0, 30)
+                ax.set_ylim(0, 30)
+                # Redraw and brief pause
+                figlive.canvas.draw()
+                figlive.canvas.flush_events()
+                plt.pause(0.001)  # Small pause to allow GUI update
             
             # Logging for plots
             log_row = env.env.current_pos.tolist()

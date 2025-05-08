@@ -13,7 +13,7 @@ class NMPC_CBF_MULTI_N:
         self.nObs = nObs                                # number of obstacles
         self.wStates = np.diag([1.0, 1.0, 0.1])         # Weight matrix for states # Reduced x/y weights from 5.0 → 1.0
         self.wCtrls = np.diag([1.0, 0.5])               # Weight matrix for controls
-        self.wTerm =  np.diag([5.0, 5.0, 0.1])     # Weight matrix for Terminal state # Reduced from 1e5 to 1e3
+        self.wTerm =  10*np.diag([5.0, 5.0, 0.1])     # Weight matrix for Terminal state # Reduced from 1e5 to 1e3
         self.min_x = -100.0                             # State bounds
         self.max_x =  100.0                             
         self.min_y = -100.0                             
@@ -83,9 +83,9 @@ class NMPC_CBF_MULTI_N:
             # objective function across horizon
             stateErr = st - solver["stateTgt"]
             costFunction = costFunction + ca.mtimes([stateErr, self.wStates, stateErr.T]) + ca.mtimes([ct, self.wCtrls, ct.T]) #+ 20.0 * velocity_penalty
-        
-        terminal_err = solver["stateHorizon"][-1,:] - solver["stateTgt"]
-        costFunction += ca.mtimes([terminal_err, self.wTerm, terminal_err.T])
+        # Terminal cost
+        # terminal_err = solver["stateHorizon"][-1,:] - solver["stateTgt"]
+        # costFunction += ca.mtimes([terminal_err, self.wTerm, terminal_err.T])
         solver["opt"].minimize(costFunction)
 
         # CBF for obstacles (vectorised)
@@ -93,7 +93,7 @@ class NMPC_CBF_MULTI_N:
             st = solver["stateHorizon"][i, :]
             st_next = solver["stateHorizon"][i+1, :]
             obs_xy = solver["obstacles"][:, :2]
-            cbf = "ecbf" # <<<<<<<<<<<<<<<<<<<<<<<<<<< SET CBF TYPE <<<<<<<<<<<<<<<<<<<<<<<<
+            cbf = "relaxed" # <<<<<<<<<<<<<<<<<<<<<<<<<<< SET CBF TYPE <<<<<<<<<<<<<<<<<<<<<<<<
             if cbf == "ecbf":
                 # >>> ECBF <<< Vectorised
                 a = (solver["obstacles"][:, 2] + self.vehRad)**-2
@@ -144,27 +144,8 @@ class NMPC_CBF_MULTI_N:
         for solver in self.solvers:
             solver["opt"].set_value(solver["stateTgt"],  targetPos )
 
-        # # Since this is only done on reset, need to initalise the state and control horizon arrays
-        # x = targetPos[0]
-        # y = targetPos[1]
-        # th = np.arctan2(y, x)
-        # # Precompute step indices (0 to N)
-        # steps = np.arange(self.currentN + 1)
-        # # Compute x and y positions at each step
-        # x = steps * np.cos(th)
-        # y = steps * np.sin(th)
-        # # Yaw is constant for all steps
-        # yaw_arr = np.full(self.currentN + 1, th)
-        # # Stack into (N+1)x3 array
-        # self.stateHorizon = np.column_stack((x, y, yaw_arr))
-        # self.ctrlHorizon = np.column_stack((np.ones(self.currentN), np.zeros(self.currentN)))
-
-
     def solve(self, currentPos, cbfParms):
-        # On first step init state and control horizon arrays
-        if self.ctrlHorizon.size == 0 and self.stateHorizon.size == 0:
-            self.stateHorizon = np.zeros((self.currentN+1, 3))
-            self.ctrlHorizon  = np.zeros((self.currentN,   2))
+        self.reset_nmpc(currentPos)     # Clear Warm Start Solutions
         # select the solver
         solver = self.solvers[self.solversIdx]
         # set the parameters
@@ -177,10 +158,11 @@ class NMPC_CBF_MULTI_N:
         sol = solver["opt"].solve()
         ## obtain the control input
         newCtrlHorizon = sol.value(solver["ctrlHorizon"])
-        self.ctrlHorizon[:-1, :] = newCtrlHorizon[1:, :]
-        self.ctrlHorizon[-1, :] = newCtrlHorizon[-1, :]
+        # self.ctrlHorizon[:-1, :] = newCtrlHorizon[1:, :]
+        # self.ctrlHorizon[-1, :] = newCtrlHorizon[-1, :]
         solStateHorizon = sol.value(solver["stateHorizon"])
         self.stateHorizon = np.vstack([solStateHorizon[1:], solStateHorizon[-1:]])
+        
         return newCtrlHorizon[0,:]
 
     def reset_nmpc(self,startPos):           # Reset the NMPC for the next episode
@@ -199,44 +181,44 @@ class NMPC_CBF_MULTI_N:
 
         return
     
-    def cold_reset_mpc(self,currentPos):
-        # Warm start the state solutions, extending at full velocity towards target
-        # dx = 0.00 * np.array([np.cos(target[2]), np.sin(target[2])])
-        # steps = np.arange(1, self.currentN+1)[:, None]  # [1,2,...,10] as column vector
-        # new_xy = steps * dx                      # Cumulative increments (10,2)
-        # new_rows = np.hstack((new_xy, np.full((self.currentN, 1), target[2])))
-        # self.stateHorizon = np.vstack((np.array([[0.0, 0.0, target[2]]]), new_rows))
-        # self.ctrlHorizon = np.column_stack((np.ones(self.currentN)*0.1, np.zeros(self.currentN)))
+    # def cold_reset_mpc(self,currentPos):
+    #     # Warm start the state solutions, extending at full velocity towards target
+    #     # dx = 0.00 * np.array([np.cos(target[2]), np.sin(target[2])])
+    #     # steps = np.arange(1, self.currentN+1)[:, None]  # [1,2,...,10] as column vector
+    #     # new_xy = steps * dx                      # Cumulative increments (10,2)
+    #     # new_rows = np.hstack((new_xy, np.full((self.currentN, 1), target[2])))
+    #     # self.stateHorizon = np.vstack((np.array([[0.0, 0.0, target[2]]]), new_rows))
+    #     # self.ctrlHorizon = np.column_stack((np.ones(self.currentN)*0.1, np.zeros(self.currentN)))
         
-        # self.stateHorizon = np.zeros((self.currentN+1, 3))
-        # self.ctrlHorizon = np.zeros((self.currentN,2))
-        self.stateHorizon = np.repeat(currentPos, self.currentN+1, axis=0)
-        self.ctrlHorizon = np.zeros((self.currentN,2))
+    #     # self.stateHorizon = np.zeros((self.currentN+1, 3))
+    #     # self.ctrlHorizon = np.zeros((self.currentN,2))
+    #     self.stateHorizon = np.repeat(currentPos, self.currentN+1, axis=0)
+    #     self.ctrlHorizon = np.zeros((self.currentN,2))
     
-    def adjustHorizon(self, action):
+    def adjustHorizon(self, action, current_position):
         newIdx = self.indexOfN(action)
         newN = self.nVals[newIdx]
-        if newN < self.currentN:
-            # Shrink horizon
-            self.ctrlHorizon = self.ctrlHorizon[0:newN, :]
-            self.stateHorizon = self.stateHorizon[0:newN+1, :]
-        elif newN > self.currentN:  # Changed from else to explicit check
-            # # Expand horizon
-            # dx = self.stateHorizon[-1] - self.stateHorizon[-2]
-            # addState = [self.stateHorizon[-1] + (i+1)*dx 
-            #         for i in range(newN - self.currentN)]
-            # addCtrl = [self.ctrlHorizon[-1] 
-            #         for _ in range(newN - self.currentN)]
-            
-            # # Convert lists to arrays before vstack
-            # self.ctrlHorizon = np.vstack([self.ctrlHorizon, np.array(addCtrl)])
-            # self.stateHorizon = np.vstack([self.stateHorizon, np.array(addState)])
-            self.stateHorizon = np.vstack([self.stateHorizon, np.repeat(self.stateHorizon[-1:], newN - self.currentN, axis=0)])
-            self.ctrlHorizon = np.vstack([self.ctrlHorizon, np.repeat(self.ctrlHorizon[-1:], newN - self.currentN, axis=0)])
-        # No else needed - do nothing when newN == currentN
-        
         self.currentN = newN
         self.solversIdx = newIdx
+        self.reset_nmpc(current_position)
+        # if newN < self.currentN:
+        #     # Shrink horizon
+        #     self.ctrlHorizon = self.ctrlHorizon[0:newN, :]
+        #     self.stateHorizon = self.stateHorizon[0:newN+1, :]
+        # elif newN > self.currentN:  # Changed from else to explicit check
+        #     # # Expand horizon
+        #     # dx = self.stateHorizon[-1] - self.stateHorizon[-2]
+        #     # addState = [self.stateHorizon[-1] + (i+1)*dx 
+        #     #         for i in range(newN - self.currentN)]
+        #     # addCtrl = [self.ctrlHorizon[-1] 
+        #     #         for _ in range(newN - self.currentN)]
+            
+        #     # # Convert lists to arrays before vstack
+        #     # self.ctrlHorizon = np.vstack([self.ctrlHorizon, np.array(addCtrl)])
+        #     # self.stateHorizon = np.vstack([self.stateHorizon, np.array(addState)])
+        #     self.stateHorizon = np.vstack([self.stateHorizon, np.repeat(self.stateHorizon[-1:], newN - self.currentN, axis=0)])
+        #     self.ctrlHorizon = np.vstack([self.ctrlHorizon, np.repeat(self.ctrlHorizon[-1:], newN - self.currentN, axis=0)])
+        # No else needed - do nothing when newN == currentN
 
     # def normalActionsCBF(self, actions):
     #     cbf = actions * (self.maxCBF - self.minCBF) + self.minCBF
