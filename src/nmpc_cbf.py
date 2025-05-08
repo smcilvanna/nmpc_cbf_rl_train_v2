@@ -11,9 +11,9 @@ class NMPC_CBF_MULTI_N:
         self.nVals = nVals                              # horizon length values for solvers
         self.nrange = len(nVals)
         self.nObs = nObs                                # number of obstacles
-        self.wStates = np.diag([1.0, 1.0, 0.1])         # Weight matrix for states # Reduced x/y weights from 5.0 → 1.0
+        self.wStates = 0.5*np.diag([1.0, 1.0, 0.1])         # Weight matrix for states # Reduced x/y weights from 5.0 → 1.0
         self.wCtrls = np.diag([1.0, 0.5])               # Weight matrix for controls
-        self.wTerm =  10*np.diag([5.0, 5.0, 0.1])     # Weight matrix for Terminal state # Reduced from 1e5 to 1e3
+        self.wTerm =  50*np.diag([5.0, 5.0, 0.1])     # Weight matrix for Terminal state # Reduced from 1e5 to 1e3
         self.min_x = -100.0                             # State bounds
         self.max_x =  100.0                             
         self.min_y = -100.0                             
@@ -84,8 +84,8 @@ class NMPC_CBF_MULTI_N:
             stateErr = st - solver["stateTgt"]
             costFunction = costFunction + ca.mtimes([stateErr, self.wStates, stateErr.T]) + ca.mtimes([ct, self.wCtrls, ct.T]) #+ 20.0 * velocity_penalty
         # Terminal cost
-        # terminal_err = solver["stateHorizon"][-1,:] - solver["stateTgt"]
-        # costFunction += ca.mtimes([terminal_err, self.wTerm, terminal_err.T])
+        terminal_err = solver["stateHorizon"][-1,:] - solver["stateTgt"]
+        costFunction += ca.mtimes([terminal_err, self.wTerm, terminal_err.T])
         solver["opt"].minimize(costFunction)
 
         # CBF for obstacles (vectorised)
@@ -198,14 +198,15 @@ class NMPC_CBF_MULTI_N:
     def adjustHorizon(self, action, current_position):
         newIdx = self.indexOfN(action)
         newN = self.nVals[newIdx]
-        self.currentN = newN
         self.solversIdx = newIdx
-        self.reset_nmpc(current_position)
-        # if newN < self.currentN:
-        #     # Shrink horizon
-        #     self.ctrlHorizon = self.ctrlHorizon[0:newN, :]
-        #     self.stateHorizon = self.stateHorizon[0:newN+1, :]
-        # elif newN > self.currentN:  # Changed from else to explicit check
+        if newN < self.currentN:
+            # Shrink horizon
+            self.ctrlHorizon = self.ctrlHorizon[0:newN, :]
+            self.stateHorizon = self.stateHorizon[0:newN+1, :]
+        elif newN > self.currentN:  # Changed from else to explicit check
+            self.reset_nmpc(current_position)
+        self.currentN = newN
+
         #     # # Expand horizon
         #     # dx = self.stateHorizon[-1] - self.stateHorizon[-2]
         #     # addState = [self.stateHorizon[-1] + (i+1)*dx 

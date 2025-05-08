@@ -165,12 +165,12 @@ def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
     # Set Target and Start Positions
     if curriculum_level == 1:
         # two mostly overlapping obstacles along path
-        grid = 30
-        gateDist = 15
+        grid = 20
+        gateDist = 10
         gateOffset = 0.0
         nGates = 1
-        obsRad = np.round(np.random.uniform(0.5,10.1),1)
-        gateGap = -obsRad*np.random.uniform(1.8, 2.001)
+        obsRad = np.round(np.random.uniform(0.5,5.1),1)
+        gateGap = -obsRad*np.random.uniform(1.9, 2.001)
         while abs(gateOffset)  < 0.05:
             gateOffset = np.random.uniform(-(obsRad*0.7),(obsRad*0.7)) 
         
@@ -179,7 +179,7 @@ def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
         grid = 30
         gateDist = np.round(np.random.uniform(15,25))
         nGates = 1
-        obsRad = np.round(np.random.uniform(0.2,2.1),1) # changed from 10
+        obsRad = np.round(np.random.uniform(0.2,5.1),1) # changed from 10
         gateGap = -obsRad*np.random.uniform(0, 0.5)
         gateOffset = 0.0
         while abs(gateOffset)  < 0.1:

@@ -33,7 +33,7 @@ class MPCHorizonEnv(gym.Env):
         self.last_target_dist = []
         # Curriculum parameters
         self.curriculum_level = curriculum_level
-        self.horizon_options = list(range(10, 201, 20))  # 10-100 in steps of 10 #changed from 5
+        self.horizon_options = list(range(10,151,10))  # 10-100 in steps of 10 #changed from 5
         self.past_lin_vels = deque(maxlen=10)
         self.av_lin_vel = 0
 
@@ -121,7 +121,7 @@ class MPCHorizonEnv(gym.Env):
         if self.current_horizon != self.horizon_options[action]:
             self.current_horizon = self.horizon_options[action]
             self.nmpc.adjustHorizon(self.current_horizon, self.current_pos)
-            print("Horizon Changed")
+            # print("Horizon Changed")
         # horizon_changed = True if (self.current_horizon == self.last_horizon or self.last_horizon == None) else False
         # Solve MPC  <<<<<<<<<<<<<< ADD CBF CUSTOM PREDICT HERE
         t = time()
@@ -157,25 +157,36 @@ class MPCHorizonEnv(gym.Env):
         # Velocity rewards (maintain ~1 m/s)
         velocity_reward = np.exp(-2*(velocity - 1.0)**2)  # Gaussian peak at 1 m/s
         
-        # MPC time rewards (piecewise function)
-        if mpc_time <= 0.05:
-            time_reward = 5.0  # Max reward for fastest solves
-        elif mpc_time <= 0.1:
-            # Linear increase: 0.1s → 1.0, 0.05s → 5.0
-            time_reward = 1.0 + (5.0 - 1.0) * (0.1 - mpc_time)/(0.1 - 0.05)
-        elif mpc_time <= 0.25:
-            # Linear decay: 0.1s → 1.0 → 0.25s → 0.0
-            time_reward = 1.0 - (mpc_time - 0.1)/0.15  # Adjusted slope
-        elif mpc_time <= 1.0:
-            # Linear penalty: 0.25s → 0.0 → 1.0s → -3.0
-            time_reward = -3.0 * (mpc_time - 0.25)/0.75
-        else:
-            # Constant penalty beyond 1s
-            time_reward = -3.0
+        # # MPC time rewards (piecewise function)
+        # if mpc_time <= 0.05:
+        #     time_reward = 1.0  # Max reward for fastest solves
+        # elif mpc_time <= 0.1:
+        #     # Linear increase: 0.1s → 1.0, 0.05s → 5.0
+        #     time_reward = (0.1 - mpc_time)/(0.1 - 0.05)
+        # elif mpc_time <= 0.25:
+        #     # Linear decay: 0.1s → 1.0 → 0.25s → 0.0
+        #     time_reward = 1.0 - (mpc_time - 0.1)/0.15  # Adjusted slope
+        # elif mpc_time <= 1.0:
+        #     # Linear penalty: 0.25s → 0.0 → 1.0s → -3.0
+        #     time_reward = -3.0 * (mpc_time - 0.25)/0.75
+        #     time_reward *= 2
+        # else:
+        #     # Constant penalty beyond 1s
+        #     time_reward = -2.0
+        if mpc_time <= 0.05:  # <50ms
+            time_reward = 1.0
+        elif mpc_time <= 0.15:  # 50-150ms
+            # Linear decrease from 1.0 to 0.0 over 0.05-0.15s
+            time_reward = 1.0 - ((mpc_time - 0.05) / 0.10)
+        elif mpc_time <= 0.8:  # 150-800ms
+            # Linear decrease from 0.0 to -2.0 over 0.15-0.8s
+            time_reward = -2.0 * ((mpc_time - 0.15) / 0.65)
+        else:  # >800ms
+            time_reward = -2.0
 
-        if time_reward > 0:
-            time_reward = time_reward/3
-            
+        # if time_reward > 0:
+        #     time_reward = time_reward/4
+
         # Horizon efficiency bonus (encourage minimal sufficient horizons)
         # horizon_efficiency = 0.2 * (1 / (horizon/10)) if horizon < 50 else 0.0
         
@@ -198,7 +209,9 @@ class MPCHorizonEnv(gym.Env):
         obs_threshold = 3.0
         horizon_bonus = 0.5*self.current_horizon*(obs_threshold - min_obs_dist) if min_obs_dist < obs_threshold else 0.0
         # Also reduce any time penalties near obstacle for long horizon
-        time_reward *= 0.5 if min_obs_dist < obs_threshold and time_reward < 0 else time_reward
+        if min_obs_dist < obs_threshold and time_reward < 0:
+            # print(min_obs_dist)
+            time_reward *= 0.5 
 
         # Check and report terminal conditions
         at_target = target_dist < 0.5
@@ -224,6 +237,10 @@ class MPCHorizonEnv(gym.Env):
             - deadlock_penalty
             # - change_penalty
         )
+        # print("total",total_reward)
+        # print("v",velocity_reward)
+        # print("t", time_reward, "for ", mpc_time)
+        # print("p", progress_reward)
         return total_reward, done
     
     def checkCollision(self,vehiclePos, obs):

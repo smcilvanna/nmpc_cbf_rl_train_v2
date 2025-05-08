@@ -23,13 +23,16 @@ class CustomLoggingCallback(BaseCallback):
     
 # Curriculum schedule
 CURRICULUM_STAGES = [
-    {"level": 1, "steps": 1e5, "name": "basic"},
-    {"level": 2, "steps": 3e6, "name": "trap"},
+    {"level": 1, "steps": 1e6, "name": "basic"},
+    {"level": 2, "steps": 5e5, "name": "med1"},
+    {"level": 2, "steps": 5e5, "name": "med2"},
+    {"level": 2, "steps": 5e5, "name": "med3"},
+    {"level": 2, "steps": 5e5, "name": "med4"}
     # {"level": 3, "steps": 5e5, "name": "complex"}
 ]
 
 retrain = False
-train_id = 3
+train_id = 4
 retrain_id = 1
 
 
