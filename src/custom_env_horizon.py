@@ -71,7 +71,8 @@ class MPCHorizonEnv(gym.Env):
         self.current_pos = np.array([0.0, 0.0, self.map['target_pos'][2]])
         self.nmpc.reset_nmpc(self.current_pos)
         self.cbf_per_obs = self.get_cbf_values(self.map['obstacles'])
-        return self._get_obs(), {}
+        init_obs, _ = self._get_obs()
+        return init_obs, {}
 
     def get_cbf_values(self,obstacles):
         cbfs = []
@@ -95,11 +96,14 @@ class MPCHorizonEnv(gym.Env):
         obs_list.extend([target_dist, np.sin(target_angle), np.cos(target_angle)])
         
         # 3. Obstacle information (20 obstacles)
+        min_obs_dist = 1000
         for obstacle in self.map['obstacles']:  # Renamed variable to avoid conflict
             vec = obstacle[:2] - self.current_pos[:2]
             dist = np.linalg.norm(vec) - 0.55 - obstacle[2]
+            min_obs_dist = dist if dist < min_obs_dist else min_obs_dist
             angle = np.arctan2(vec[1], vec[0])
             obs_list.extend([dist, np.sin(angle), np.cos(angle)])
+        # print(f"Closest Obstacle : {min_obs_dist} m")
 
         # 4. Velocities, current average
         if len(self.past_lin_vels) > 0:
@@ -109,7 +113,7 @@ class MPCHorizonEnv(gym.Env):
             obs_list.extend([0.0,0.0])
 
         # Convert to numpy array at the end
-        return np.array(obs_list, dtype=np.float32)
+        return np.array(obs_list, dtype=np.float32), min_obs_dist
 
     def step(self, action):
         self.current_horizon = self.horizon_options[action]
@@ -124,8 +128,10 @@ class MPCHorizonEnv(gym.Env):
         self.current_pos = self.nmpc.stateHorizon[0,:]
         self.add_velocity(u[0])
         
+        observations, min_obs_dist = self._get_obs(mpc_time)
+
         # Calculate reward and done
-        reward, done = self._calculate_reward(self.current_pos, mpc_time)
+        reward, done = self._calculate_reward(self.current_pos, mpc_time, min_obs_dist)
         # self.last_mpc_time = mpc_time
         # self.last_horizon = self.current_horizon
 
@@ -137,9 +143,9 @@ class MPCHorizonEnv(gym.Env):
             # "target_distance": np.linalg.norm(self.current_pos[:2] - self.map['target_pos'][:2])
             }
 
-        return self._get_obs(mpc_time), reward, done, False, info
+        return observations, reward, done, False, info
 
-    def _calculate_reward(self, position, mpc_time):
+    def _calculate_reward(self, position, mpc_time, min_obs_dist):
         target_dist = np.linalg.norm(position[:2] - self.map['target_pos'][:2])
         collision = any(self.checkCollision(position, obs)[0] for obs in self.map['obstacles'])
         velocity = self.past_lin_vels[-1]  # Assuming position[3] contains velocity (add to observations)
@@ -164,7 +170,7 @@ class MPCHorizonEnv(gym.Env):
             time_reward = -3.0
 
         if time_reward > 0:
-            time_reward = time_reward/2
+            time_reward = time_reward/3
             
         # Horizon efficiency bonus (encourage minimal sufficient horizons)
         # horizon_efficiency = 0.2 * (1 / (horizon/10)) if horizon < 50 else 0.0
@@ -177,10 +183,18 @@ class MPCHorizonEnv(gym.Env):
         
         # Deadlock penalty - if average velocity falls too low
         deadlock_penalty = 2000.0 if len(self.past_lin_vels) >= 10 and self.av_lin_vel < 0.05 else 0
+        # increase penalty if short horizon
+        if deadlock_penalty > 0 and self.current_horizon < 55:
+            deadlock_penalty *=2
         
         # Smoothness penalty (discourage frequent horizon changes)
         # change_penalty = 0.8 if horizon_changed else 0.0
         
+        # Horizon bonus close to obstacles
+        obs_threshold = 3.0
+        horizon_bonus = 0.5*self.current_horizon*(obs_threshold - min_obs_dist) if min_obs_dist < obs_threshold else 0.0
+        # Also reduce any time penalties near obstacle for long horizon
+        time_reward *= 0.5 if min_obs_dist < obs_threshold and time_reward < 0 else time_reward
 
         # Check and report terminal conditions
         at_target = target_dist < 0.5
@@ -192,7 +206,7 @@ class MPCHorizonEnv(gym.Env):
             print(f"[FAIL] Collision")
         if at_target:
             print(f"[SUCCESS] At target!")
-            progress_reward += 10
+            progress_reward += 100  # increased reward from 10 to reward successful navigation
 
         done =  at_target or collision or deadlock
         self.last_target_dist = target_dist
