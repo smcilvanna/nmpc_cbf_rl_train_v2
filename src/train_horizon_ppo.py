@@ -24,13 +24,13 @@ class CustomLoggingCallback(BaseCallback):
 # Curriculum schedule
 CURRICULUM_STAGES = [
     {"level": 1, "steps": 1e5, "name": "basic"},
-    {"level": 2, "steps": 5e6, "name": "trap"},
+    {"level": 2, "steps": 3e6, "name": "trap"},
     # {"level": 3, "steps": 5e5, "name": "complex"}
 ]
 
-retrain = True
-train_id = 2
-retrain_id = 2
+retrain = False
+train_id = 3
+retrain_id = 1
 
 
 def train():
