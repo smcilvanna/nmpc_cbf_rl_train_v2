@@ -175,7 +175,7 @@ if __name__ == "__main__":
     
     # Create wrapped environment
     env = ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=2), persist_steps=PERSIST_STEPS)
-    with open('./env-2-2.pkl', 'rb') as f: 
+    with open('./env-2-3.pkl', 'rb') as f: 
         map = pickle.load(f)
 
     obs, _ = env.reset(map=map)
@@ -185,13 +185,14 @@ if __name__ == "__main__":
     action_counter = 0
     
     # Load Horizon Prediction Model
-    model = PPO.load("../../train_data/horizon_only/ppo_mpc_horizon_ks_1-3d_gates")
+    model = PPO.load("/home/sm/Documents/python/husky/nmpc_cbf_rl_train_v2_horizon_only/src/train_data/ppo_mpc_horizon_ks_3-1_trap.zip")
 
     # print(f"Initial observation: {obs[:4]}... (truncated)")
     log = []
     while not done and step < MAX_STEPS:
         # Take random action (will only be applied every `PERSIST_STEPS` steps)
         action, _ = model.predict(obs, deterministic=True) #env.action_space.sample()
+        # action = 13
         next_obs, reward, done, _, info = env.step(action)
 
         # Logging for plots

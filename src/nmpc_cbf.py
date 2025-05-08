@@ -13,7 +13,7 @@ class NMPC_CBF_MULTI_N:
         self.nObs = nObs                                # number of obstacles
         self.wStates = np.diag([1.0, 1.0, 0.1])         # Weight matrix for states # Reduced x/y weights from 5.0 → 1.0
         self.wCtrls = np.diag([1.0, 0.5])               # Weight matrix for controls
-        self.wTerm = 1e3*np.diag([1.0, 1.0, 0.001])   # Weight matrix for Terminal state # Reduced from 1e5 to 1e3
+        self.wTerm =  np.diag([5.0, 5.0, 0.1])     # Weight matrix for Terminal state # Reduced from 1e5 to 1e3
         self.min_x = -100.0                             # State bounds
         self.max_x =  100.0                             
         self.min_y = -100.0                             
@@ -75,9 +75,17 @@ class NMPC_CBF_MULTI_N:
             # stNext = integrator(x0=st, p=ct)["xf"]  # Next state i+1
             solver["opt"].subject_to(solver["stateHorizon"][i+1, :] == stNext)  # append state constraint for horizon step i+1
             
+            # # NEW: Velocity penalty term
+            # target_distance = ca.norm_2(st[:2] - solver["stateTgt"][:2])
+            # velocity_error = self.max_v - ct[0]  # Difference from max allowed velocity
+            # velocity_penalty = ca.exp(-0.5 * target_distance) * (velocity_error ** 2)
+
             # objective function across horizon
             stateErr = st - solver["stateTgt"]
-            costFunction = costFunction + ca.mtimes([stateErr, self.wStates, stateErr.T]) + ca.mtimes([ct, self.wCtrls, ct.T])
+            costFunction = costFunction + ca.mtimes([stateErr, self.wStates, stateErr.T]) + ca.mtimes([ct, self.wCtrls, ct.T]) #+ 20.0 * velocity_penalty
+        
+        terminal_err = solver["stateHorizon"][-1,:] - solver["stateTgt"]
+        costFunction += ca.mtimes([terminal_err, self.wTerm, terminal_err.T])
         solver["opt"].minimize(costFunction)
 
         # CBF for obstacles (vectorised)
@@ -85,7 +93,7 @@ class NMPC_CBF_MULTI_N:
             st = solver["stateHorizon"][i, :]
             st_next = solver["stateHorizon"][i+1, :]
             obs_xy = solver["obstacles"][:, :2]
-            cbf = "relaxed" # <<<<<<<<<<<<<<<<<<<<<<<<<<< SET CBF TYPE <<<<<<<<<<<<<<<<<<<<<<<<
+            cbf = "ecbf" # <<<<<<<<<<<<<<<<<<<<<<<<<<< SET CBF TYPE <<<<<<<<<<<<<<<<<<<<<<<<
             if cbf == "ecbf":
                 # >>> ECBF <<< Vectorised
                 a = (solver["obstacles"][:, 2] + self.vehRad)**-2

@@ -179,7 +179,7 @@ def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
         grid = 30
         gateDist = np.round(np.random.uniform(15,25))
         nGates = 1
-        obsRad = np.round(np.random.uniform(0.5,10.1),1)
+        obsRad = np.round(np.random.uniform(0.2,2.1),1) # changed from 10
         gateGap = -obsRad*np.random.uniform(0, 0.5)
         gateOffset = 0.0
         while abs(gateOffset)  < 0.1:

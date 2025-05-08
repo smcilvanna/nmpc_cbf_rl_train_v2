@@ -3,6 +3,8 @@ from custom_env_horizon import MPCHorizonEnv, ActionPersistenceWrapper
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.animation import FuncAnimation
+import pickle
+import matplotlib.pyplot as plt
 
 
 def plotSimdata(simdata,env):
@@ -174,31 +176,58 @@ if __name__ == "__main__":
     
     # Create wrapped environment
     env = ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=2), persist_steps=PERSIST_STEPS)
+    with open('./env-2-4.pkl', 'rb') as f: 
+        map = pickle.load(f)
+
+    # Plot figure for loop
+    plt.ion()  # Enable interactive mode
+    figlive, ax = plt.subplots()
+    line, = ax.plot([], [], 'r--')  # Empty line object
+    ax.set_xlabel('X Position')
+    ax.set_ylabel('Y Position')
+    ax.grid(True)
+
+    
     
     for ep in range(TEST_EPISODES):
-        obs, _ = env.reset()
+        obs, _ = env.reset(map=map)
         done = False
         step = 0
         last_action = None
         action_counter = 0
+
+        ob = env.env.map['obstacles'][0:3,:]
+        for i in range(ob.shape[0]):
+            ax.add_patch(Circle( ob[i,0:2], ob[i,2], color='red'))
         
         print(f"\n=== Episode {ep+1} ===")
         print(f"Initial observation: {obs[:4]}... (truncated)")
         log = []
+        action = 0
         while not done and step < MAX_STEPS:
-            # Take random action (will only be applied every `PERSIST_STEPS` steps)
-            action = env.action_space.sample()
+            # Take  action that sets horizon length (will only be applied every `PERSIST_STEPS` steps)
+            # action = env.action_space.sample() #if env.env.min_obs_dist > 10 else 9
+            action = 8
+            if step == 120:
+                env.env.nmpc.reset_nmpc(env.env.current_pos)
+                print("Reset predicted states")
             next_obs, reward, done, _, info = env.step(action)
 
-            # # Track action changes
-            # if action != last_action:
-            #     print(f"\n[ACTION CHANGED] New action: {env.env.horizon_options[action]} (Step {step+1})")
-            #     last_action = action
-            #     action_counter = 0
-            # else:
-            #     action_counter += 1
-
-            # Logging (optional)
+            projected_states = env.env.nmpc.stateHorizon[:,0:2]
+            # Update plot
+            ax.set_title(f"Horizon Projection (N={env.env.nmpc.currentN})")
+            line.set_data(projected_states[:,0], projected_states[:,1])
+            line.set_linewidth(1)
+            # Adjust view limits
+            current_pos = env.env.current_pos[:2]
+            ax.set_xlim(0, 30)
+            ax.set_ylim(0, 30)
+            # Redraw and brief pause
+            figlive.canvas.draw()
+            figlive.canvas.flush_events()
+            plt.pause(0.001)  # Small pause to allow GUI update
+            
+            # Logging for plots
             log_row = env.env.current_pos.tolist()
             log_row.extend(info["u"].tolist())
             log_row.extend(next_obs.tolist())
@@ -208,21 +237,12 @@ if __name__ == "__main__":
 
             # Print step info
             print(f"\nStep {step+1}:")
-            # print(f"Action active: {env.env.horizon_options[last_action]} | N= {env.env.nmpc.currentN}")
-            # print(f"Reward: {reward:.2f}")
-            # print(f"MPC time: {next_obs[0]:.3f}s")
-            # print(f"Target distance: {next_obs[1]:.2f}m")
-            
-            # if done:
-            #     print("Episode terminated!")
-            #     if env.env.current_pos[0] < 0.5:
-            #         print("Reason: Reached target!")
-            #     else:
-            #         print("Reason: Collision detected!")
             
             step += 1
             obs = next_obs
     
+    plt.ioff()  # Turn off interactive mode
+    plt.show(block=True)  # Block execution until static plot is closed
     # Plot run
     simdata = np.array(log)
     plotSimdata(simdata,env.env.map)
