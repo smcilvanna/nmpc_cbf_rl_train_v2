@@ -204,7 +204,7 @@ if __name__ == "__main__":
         print(f"\n=== Episode {ep+1} ===")
         print(f"Initial observation: {obs[:4]}... (truncated)")
         log = []
-        action = 10
+        action = 1
         while not done and step < MAX_STEPS:
             # Take  action that sets horizon length (will only be applied every `PERSIST_STEPS` steps)
             # action = env.action_space.sample() #if env.env.min_obs_dist > 10 else 9
@@ -252,4 +252,6 @@ if __name__ == "__main__":
     plt.show(block=True)  # Block execution until static plot is closed
     # Plot run
     simdata = np.array(log)
+    print(f"Total Reward : {np.sum(simdata[:,-2])}")
+    print(f"Rewards Before Terminal : {np.sum(simdata[:-1,-2])}")
     plotSimdata(simdata,env.env.map)
