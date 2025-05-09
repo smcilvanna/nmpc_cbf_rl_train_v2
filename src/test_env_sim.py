@@ -176,10 +176,10 @@ if __name__ == "__main__":
     
     # Create wrapped environment
     env = ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=2), persist_steps=PERSIST_STEPS)
-    with open('./env-2-2.pkl', 'rb') as f: 
-        map = pickle.load(f)
+    # with open('./env-2-2.pkl', 'rb') as f: 
+    #     map = pickle.load(f)
 
-    liveplot = False
+    liveplot = True
     if liveplot:
         # Plot figure for loop
         plt.ion()  # Enable interactive mode
@@ -194,7 +194,7 @@ if __name__ == "__main__":
     # map["obstacles"][1,0:2] = map["obstacles"][1,0:2]-np.array([[o,o]])
 
     for ep in range(TEST_EPISODES):
-        obs, _ = env.reset(map=map)
+        obs, _ = env.reset()
         done = False
         step = 0
         last_action = None
@@ -204,14 +204,16 @@ if __name__ == "__main__":
         print(f"\n=== Episode {ep+1} ===")
         print(f"Initial observation: {obs[:4]}... (truncated)")
         log = []
-        action = 1
+        action = 10
+        add = -0
         while not done and step < MAX_STEPS:
             # Take  action that sets horizon length (will only be applied every `PERSIST_STEPS` steps)
             # action = env.action_space.sample() #if env.env.min_obs_dist > 10 else 9
             # action = 1
-            # if step == 70:
-            #     action = 7
-            #     print("CHANGE ACTION")
+            # if step % 5 == 0:
+            #     add = add*-1
+            #     action += add
+                # print(action)
             next_obs, reward, done, _, info = env.step(action)
             projected_states = env.env.nmpc.stateHorizon[:,0:2]
             

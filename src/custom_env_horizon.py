@@ -34,7 +34,7 @@ class MPCHorizonEnv(gym.Env):
         # Curriculum parameters
         self.curriculum_level = curriculum_level
         self.horizon_options = list(range(10,151,10))  # 10-100 in steps of 10 #changed from 5
-        self.past_lin_vels = deque(maxlen=10)
+        self.past_lin_vels = deque(maxlen=5)
         self.av_lin_vel = 0
 
         # Action space: Discrete horizon selection
@@ -49,7 +49,7 @@ class MPCHorizonEnv(gym.Env):
         )
         
         # MPC system
-        self.nmpc = NMPC_CBF_MULTI_N(0.1, self.horizon_options, nObs=20)
+        self.nmpc = NMPC_CBF_MULTI_N(0.1, self.horizon_options, nObs=4)
         # self.reset()
 
     def add_velocity(self,v):
@@ -72,6 +72,19 @@ class MPCHorizonEnv(gym.Env):
         self.nmpc.reset_nmpc(self.current_pos)
         self.cbf_per_obs = self.get_cbf_values(self.map['obstacles'])
         init_obs, _ = self._get_obs()
+
+
+        # Set pass target point for calcs
+        self.pass_tgt = np.array(self.map["pass_targets"]).flatten()
+
+        # Set obs mid point for calcs
+        oxy1 = self.map["obstacles"][0,0:2]
+        oxy2 = self.map["obstacles"][1,0:2]
+        self.mid = (oxy1 + oxy2)/2
+
+        # Calculate angle between deadlock and pass points
+        self.radang = abs(np.arctan2(self.pass_tgt[1], self.pass_tgt[0]) - np.arctan2(self.mid[1], self.mid[0]))
+        self.passpoint = False
         return init_obs, {}
 
     def get_cbf_values(self,obstacles):
@@ -156,7 +169,7 @@ class MPCHorizonEnv(gym.Env):
         
         # Velocity rewards (maintain ~1 m/s)
         velocity_reward = np.exp(-2*(velocity - 1.0)**2)  # Gaussian peak at 1 m/s
-        
+        velocity_reward *= 0.15
         # # MPC time rewards (piecewise function)
         # if mpc_time <= 0.05:
         #     time_reward = 1.0  # Max reward for fastest solves
@@ -183,6 +196,8 @@ class MPCHorizonEnv(gym.Env):
             time_reward = -2.0 * ((mpc_time - 0.15) / 0.65)
         else:  # >800ms
             time_reward = -2.0
+        if time_reward < 0:
+            time_reward *= 0.5
 
         # if time_reward > 0:
         #     time_reward = time_reward/4
@@ -191,31 +206,59 @@ class MPCHorizonEnv(gym.Env):
         # horizon_efficiency = 0.2 * (1 / (horizon/10)) if horizon < 50 else 0.0
         
         # Collision penalty (keep severe)
-        collision_penalty = 2000.0 if collision else 0.0
+        collision_penalty = 500.0 if collision else 0.0
         
         # Progress reward (keep small since MPC handles progress)
-        progress_reward = 0.2 * (self.last_target_dist - target_dist) if self.last_target_dist else 0.0
+        progress_reward = 0.05 * (self.last_target_dist - target_dist) if self.last_target_dist else 0.0
         
         # Deadlock penalty - if average velocity falls too low
-        deadlock_penalty = 2000.0 if len(self.past_lin_vels) >= 10 and self.av_lin_vel < 0.05 else 0
+        deadlock_penalty = 500.0 if len(self.past_lin_vels) >= 5 and self.av_lin_vel < 0.2 else 0
         # increase penalty if short horizon
-        if deadlock_penalty > 0 and self.current_horizon < 55:
-            deadlock_penalty *=2
+        # if deadlock_penalty > 0 and self.current_horizon < 41:
+        #     deadlock_penalty *= 1 + (40 - self.current_horizon)/30
         
         # Smoothness penalty (discourage frequent horizon changes)
         # change_penalty = 0.8 if horizon_changed else 0.0
         
         # Horizon bonus close to obstacles
         obs_threshold = 3.0
-        horizon_bonus = 0.5*self.current_horizon*(obs_threshold - min_obs_dist) if min_obs_dist < obs_threshold else 0.0
+        # horizon_bonus = 0.5*self.current_horizon*(obs_threshold - min_obs_dist) if min_obs_dist < obs_threshold else 0.0
         # Also reduce any time penalties near obstacle for long horizon
-        if min_obs_dist < obs_threshold and time_reward < 0:
-            # print(min_obs_dist)
-            time_reward *= 0.5 
+        if min_obs_dist < obs_threshold: #and time_reward < 0:
+            reward_mul = max(0.2, 0.32*min_obs_dist+0.04)
+            # print(reward_mul)
+            time_reward *= reward_mul
 
         # Check and report terminal conditions
         at_target = target_dist < 0.5
         deadlock = True if deadlock_penalty > 0 else False
+
+        # Before obstacle assign reward / penalty for aiming at pass/deadlock points
+        aim_reward = 0
+        if not self.passpoint and self.min_obs_dist > 0.05:
+
+            # Check if passpoint has been reached
+            vec = self.pass_tgt[:2] - self.current_pos[:2]
+            self.passpoint = (np.linalg.norm(vec) - 0.75) < 0.0
+
+            # Check if aiming at deadlock
+            vec = self.mid - self.current_pos[:2]
+            dang = np.arctan2(vec[1], vec[0])
+            dead_yaw = abs(dang - self.current_pos[2]) < self.radang
+
+            # Check if aiming for passpoint
+            vec = self.pass_tgt - self.current_pos[:2]
+            pang = np.arctan2(vec[1], vec[0])
+            pass_yaw = abs(pang - self.current_pos[2]) < self.radang
+
+
+            if pass_yaw:
+                # print("Aiming to clear")
+                aim_reward = 1.5
+            if dead_yaw:
+                # print("Aiming at deadlock")
+                aim_reward = -1.5
+                
 
         if deadlock:    
             print(f"[FAIL] Vehicle Deadlock | Average Velocity: {self.av_lin_vel}m/s across {len(self.past_lin_vels)} samples")
@@ -223,7 +266,7 @@ class MPCHorizonEnv(gym.Env):
             print(f"[FAIL] Collision")
         if at_target:
             print(f"[SUCCESS] At target!")
-            progress_reward += 100  # increased reward from 10 to reward successful navigation
+            progress_reward += 200  # increased reward from 10 to reward successful navigation
 
         done =  at_target or collision or deadlock
         self.last_target_dist = target_dist
@@ -236,11 +279,12 @@ class MPCHorizonEnv(gym.Env):
             - collision_penalty
             - deadlock_penalty
             # - change_penalty
+            + aim_reward
         )
-        # print("total",total_reward)
-        # print("v",velocity_reward)
-        # print("t", time_reward, "for ", mpc_time)
-        # print("p", progress_reward)
+        # print("total : ",total_reward)
+        # print("vel   : ",velocity_reward)
+        # print("time  : ", time_reward, "for ", round(mpc_time,4))
+        # print("p     : ", progress_reward)
         return total_reward, done
     
     def checkCollision(self,vehiclePos, obs):

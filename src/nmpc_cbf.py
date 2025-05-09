@@ -13,7 +13,7 @@ class NMPC_CBF_MULTI_N:
         self.nObs = nObs                                # number of obstacles
         self.wStates = 0.5*np.diag([1.0, 1.0, 0.1])         # Weight matrix for states # Reduced x/y weights from 5.0 → 1.0
         self.wCtrls = np.diag([1.0, 0.5])               # Weight matrix for controls
-        self.wTerm =  50*np.diag([5.0, 5.0, 0.1])     # Weight matrix for Terminal state # Reduced from 1e5 to 1e3
+        self.wTerm =  10*np.diag([5.0, 5.0, 0.1])     # Weight matrix for Terminal state # Reduced from 1e5 to 1e3
         self.min_x = -100.0                             # State bounds
         self.max_x =  100.0                             
         self.min_y = -100.0                             

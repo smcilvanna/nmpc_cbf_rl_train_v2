@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from dataclasses import dataclass
-import pickle
+import pickle, random, os
 
 @dataclass
 class MapLimits:
@@ -176,10 +176,10 @@ def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
         
     elif curriculum_level == 2:
         # two overlapping obstacles with concave trap
-        grid = 30
-        gateDist = np.round(np.random.uniform(15,25))
+        grid = 20
+        gateDist = np.round(np.random.uniform(8,12))
         nGates = 1
-        obsRad = np.round(np.random.uniform(0.2,5.1),1) # changed from 10
+        obsRad = np.round(np.random.uniform(1.0,3.1),1) # changed from 10
         gateGap = -obsRad*np.random.uniform(0, 0.5)
         gateOffset = 0.0
         while abs(gateOffset)  < 0.1:
@@ -285,8 +285,13 @@ def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
     else:
         out["fig"] = None
 
-    
-    
+    # # bypass gen and load pre created map
+    # file = random.choice([f for f in os.listdir('maps') if f.endswith('.pkl')])
+    # # print(file)
+    # # with open(os.path.join('maps', file), 'rb') as f: 
+    # with open ("maps/env-2-3.pkl", "rb") as f:
+    #     out = pickle.load(f)
+
 
     return out
 
@@ -335,16 +340,19 @@ def place_obstacles(start_pose, radii, dist_to_gap, offset_perp, gap_size):
 
 if __name__ == "__main__":
     clevel = 2
-    env = genCurEnv_2(curriculum_level=clevel , gen_fig=True, maxObs=20)
+    env = genCurEnv_2(curriculum_level=clevel , gen_fig=True, maxObs=4)
 
-    mapid = None
-    while mapid is None or int(mapid) < 0:
-        mapid = input(f"What ID to set for level {clevel} map file? : ")
-        savename = f'env-{clevel}-{mapid}.pkl'
-        input(f'[SAVE] File : {savename}')
-    
-    # Save to file
-    with open(savename, 'wb') as f:
-        pickle.dump(env, f)
+    savefile = True
+
+    if savefile:
+        mapid = None
+        while mapid is None or int(mapid) < 0:
+            mapid = input(f"What ID to set for level {clevel} map file? : ")
+            savename = f'env-{clevel}-{mapid}.pkl'
+            input(f'[SAVE] File : {savename}')
+        
+        # Save to file
+        with open(savename, 'wb') as f:
+            pickle.dump(env, f)
 
 
