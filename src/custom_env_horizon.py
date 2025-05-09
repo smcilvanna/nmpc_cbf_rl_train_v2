@@ -44,7 +44,7 @@ class MPCHorizonEnv(gym.Env):
         self.observation_space = gym.spaces.Box(
             low=-np.inf, 
             high=np.inf,
-            shape=(4 + 20*3 + 2,),
+            shape=(4 + 4*3 + 2,),
             dtype=np.float32
         )
         

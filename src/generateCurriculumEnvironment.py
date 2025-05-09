@@ -162,135 +162,135 @@ def setGate(start_pos,dist,rad,gap,offset,ngates):
     return gate, gtgt
 
 def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
-    # Set Target and Start Positions
-    if curriculum_level == 1:
-        # two mostly overlapping obstacles along path
-        grid = 20
-        gateDist = 10
-        gateOffset = 0.0
-        nGates = 1
-        obsRad = np.round(np.random.uniform(0.5,5.1),1)
-        gateGap = -obsRad*np.random.uniform(1.9, 2.001)
-        while abs(gateOffset)  < 0.05:
-            gateOffset = np.random.uniform(-(obsRad*0.7),(obsRad*0.7)) 
+    # # Set Target and Start Positions
+    # if curriculum_level == 1:
+    #     # two mostly overlapping obstacles along path
+    #     grid = 20
+    #     gateDist = 10
+    #     gateOffset = 0.0
+    #     nGates = 1
+    #     obsRad = np.round(np.random.uniform(0.5,5.1),1)
+    #     gateGap = -obsRad*np.random.uniform(1.9, 2.001)
+    #     while abs(gateOffset)  < 0.05:
+    #         gateOffset = np.random.uniform(-(obsRad*0.7),(obsRad*0.7)) 
         
-    elif curriculum_level == 2:
-        # two overlapping obstacles with concave trap
-        grid = 20
-        gateDist = np.round(np.random.uniform(8,12))
-        nGates = 1
-        obsRad = np.round(np.random.uniform(1.0,3.1),1) # changed from 10
-        gateGap = -obsRad*np.random.uniform(0, 0.5)
-        gateOffset = 0.0
-        while abs(gateOffset)  < 0.1:
-            gateOffset = np.round(np.random.uniform(-(obsRad*0.95),(obsRad*0.95)),1)
-    elif curriculum_level == 3:
-        grid = 40
-        gateDist = np.round(np.random.uniform(15,25))
-        nGates = 5
-        obsRad = np.round(np.random.uniform(0.5,10.1),1)
-        gateGap = np.random.uniform(1.2, 2.5)
-        gateOffset = 0.0
-        while abs(gateOffset)  < obsRad*0.4:
-            gateOffset = np.round(np.random.uniform(-(obsRad*3.5),(obsRad*3.5)),1)
-    elif curriculum_level == 4:
-        grid = 50
-    else:
-        print("[ERROR] Invalid curriculum level.")
-        exit()
+    # elif curriculum_level == 2:
+    #     # two overlapping obstacles with concave trap
+    #     grid = 20
+    #     gateDist = np.round(np.random.uniform(8,12))
+    #     nGates = 1
+    #     obsRad = np.round(np.random.uniform(0.5,3.1),1) # changed from 10
+    #     gateGap = -obsRad*np.random.uniform(0, 0.5)
+    #     gateOffset = 0.0
+    #     while abs(gateOffset)  < 0.1:
+    #         gateOffset = np.round(np.random.uniform(-(obsRad*0.95),(obsRad*0.95)),1)
+    # elif curriculum_level == 3:
+    #     grid = 40
+    #     gateDist = np.round(np.random.uniform(15,25))
+    #     nGates = 5
+    #     obsRad = np.round(np.random.uniform(0.5,10.1),1)
+    #     gateGap = np.random.uniform(1.2, 2.5)
+    #     gateOffset = 0.0
+    #     while abs(gateOffset)  < obsRad*0.4:
+    #         gateOffset = np.round(np.random.uniform(-(obsRad*3.5),(obsRad*3.5)),1)
+    # elif curriculum_level == 4:
+    #     grid = 50
+    # else:
+    #     print("[ERROR] Invalid curriculum level.")
+    #     exit()
 
-    target_pos = _generate_valid_target(grid)
-    target_yaw = np.arctan2(target_pos[1],target_pos[0])
-    target_pos = np.append(target_pos, target_yaw)
-    start_pos = np.array([0.0, 0.0, target_yaw])
+    # target_pos = _generate_valid_target(grid)
+    # target_yaw = np.arctan2(target_pos[1],target_pos[0])
+    # target_pos = np.append(target_pos, target_yaw)
+    # start_pos = np.array([0.0, 0.0, target_yaw])
     
 
-    if curriculum_level in [1,2]:
-        obstacles, gtgt = setGate(start_pos,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
-        passTarget = gtgt
-        passTarget[0] += np.sign(gateOffset)*((2*obsRad)+0.55+ 0.5*gateGap)*np.cos(target_yaw+np.pi/2) 
-        passTarget[1] += np.sign(gateOffset)*((2*obsRad)+0.55+ 0.5*gateGap)*np.sin(target_yaw+np.pi/2)
-        passTarget = [passTarget.tolist()]
+    # if curriculum_level in [1,2]:
+    #     obstacles, gtgt = setGate(start_pos,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
+    #     passTarget = gtgt
+    #     passTarget[0] += np.sign(gateOffset)*((2*obsRad)+0.55+ 0.5*gateGap)*np.cos(target_yaw+np.pi/2) 
+    #     passTarget[1] += np.sign(gateOffset)*((2*obsRad)+0.55+ 0.5*gateGap)*np.sin(target_yaw+np.pi/2)
+    #     passTarget = [passTarget.tolist()]
     
-    elif curriculum_level == 3:
-        obstacles, gtgt = setGate(start_pos,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
-        passTarget = [gtgt.tolist()]
+    # elif curriculum_level == 3:
+    #     obstacles, gtgt = setGate(start_pos,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
+    #     passTarget = [gtgt.tolist()]
     
-    elif curriculum_level == 4:
-        gateDist = np.round(np.random.uniform(12,22))
-        nGates = 5
-        obsRad = np.round(np.random.uniform(0.5,10.1),1)
-        gateGap = np.random.uniform(1.2, 2.5)
-        gateOffset = 0.0
-        while abs(gateOffset)  < obsRad*0.4:
-            gateOffset = np.round(np.random.uniform(-(obsRad*3.5),(obsRad*3.5)),1)
-        obstacles1, gtgt1 = setGate(start_pos,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
+    # elif curriculum_level == 4:
+    #     gateDist = np.round(np.random.uniform(12,22))
+    #     nGates = 5
+    #     obsRad = np.round(np.random.uniform(0.5,10.1),1)
+    #     gateGap = np.random.uniform(1.2, 2.5)
+    #     gateOffset = 0.0
+    #     while abs(gateOffset)  < obsRad*0.4:
+    #         gateOffset = np.round(np.random.uniform(-(obsRad*3.5),(obsRad*3.5)),1)
+    #     obstacles1, gtgt1 = setGate(start_pos,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
 
-        # second gap
-        passDist = np.linalg.norm(target_pos[0:2]-gtgt1)
-        print(passDist)
-        gateDist = np.round(np.random.uniform(passDist*0.25,passDist*0.75))
-        nGates = 5
-        obsRad = np.round(np.random.uniform(0.5,(10.5-obsRad)),1)
-        gateGap = np.random.uniform(1.2, 2.5)
-        gate1offset = gateOffset
-        gateOffset = 0.0
-        while abs(gateOffset)  < obsRad*0.4 and np.sign(gateOffset) != np.sign(gate1offset):
-            gateOffset = np.round(np.random.uniform(-(obsRad*3.5),(obsRad*3.5)),1)
-        gapStart = np.array([gtgt1[0], gtgt1[1], np.arctan2( target_pos[1]-gtgt1[1], target_pos[0]-gtgt1[0])])
-        obstacles2, gtgt2 = setGate(gapStart,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
-        obstacles = np.vstack([obstacles1, obstacles2])
-        passTarget = [gtgt1.tolist(),gtgt2.tolist()]
+    #     # second gap
+    #     passDist = np.linalg.norm(target_pos[0:2]-gtgt1)
+    #     print(passDist)
+    #     gateDist = np.round(np.random.uniform(passDist*0.25,passDist*0.75))
+    #     nGates = 5
+    #     obsRad = np.round(np.random.uniform(0.5,(10.5-obsRad)),1)
+    #     gateGap = np.random.uniform(1.2, 2.5)
+    #     gate1offset = gateOffset
+    #     gateOffset = 0.0
+    #     while abs(gateOffset)  < obsRad*0.4 and np.sign(gateOffset) != np.sign(gate1offset):
+    #         gateOffset = np.round(np.random.uniform(-(obsRad*3.5),(obsRad*3.5)),1)
+    #     gapStart = np.array([gtgt1[0], gtgt1[1], np.arctan2( target_pos[1]-gtgt1[1], target_pos[0]-gtgt1[0])])
+    #     obstacles2, gtgt2 = setGate(gapStart,dist=gateDist,rad=obsRad,gap=gateGap,offset=gateOffset, ngates=nGates)
+    #     obstacles = np.vstack([obstacles1, obstacles2])
+    #     passTarget = [gtgt1.tolist(),gtgt2.tolist()]
 
 
-    while obstacles.shape[0] < maxObs:
-        dist = 150                                      # put a dummy obstacle far away
-        angle = np.deg2rad(np.random.randint(0,90))     # randomise angle to obstacle and pos
-        false_obs = np.round(np.array([np.cos(angle)*dist , np.sin(angle)*dist, (np.random.randint(1,101))/10]),1)
-        obstacles = np.vstack([obstacles, false_obs])     # add to stack
+    # while obstacles.shape[0] < maxObs:
+    #     dist = 150                                      # put a dummy obstacle far away
+    #     angle = np.deg2rad(np.random.randint(0,90))     # randomise angle to obstacle and pos
+    #     false_obs = np.round(np.array([np.cos(angle)*dist , np.sin(angle)*dist, (np.random.randint(1,101))/10]),1)
+    #     obstacles = np.vstack([obstacles, false_obs])     # add to stack
     
-    startDist = np.linalg.norm(target_pos)
+    # startDist = np.linalg.norm(target_pos)
 
-    out = {
-        'target_pos': target_pos,
-        'obstacles': obstacles,
-        'pass_targets' : passTarget,
-        'startDist' : startDist
-        }
+    # out = {
+    #     'target_pos': target_pos,
+    #     'obstacles': obstacles,
+    #     'pass_targets' : passTarget,
+    #     'startDist' : startDist
+    #     }
 
 
-    if gen_fig:
-        fig, ax = plt.subplots()
-        # ax.plot(0, 0, 'bo', markersize=8, label='Start')
-        ax.plot(target_pos[0], target_pos[1], 'gx', markersize=10, label='Target')
+    # if gen_fig:
+    #     fig, ax = plt.subplots()
+    #     # ax.plot(0, 0, 'bo', markersize=8, label='Start')
+    #     ax.plot(target_pos[0], target_pos[1], 'gx', markersize=10, label='Target')
         
-        # Draw safety zones
-        ax.add_patch(Circle((0, 0), 1.0, color='blue', alpha=0.1))      # vehicle start clearance
-        ax.add_patch(Circle((0, 0), 0.55, color='black', alpha=0.8))      # vehicle start clearance
-        ax.add_patch(Circle(target_pos, 0.5, color='green', alpha=0.1)) # finish clearance
+    #     # Draw safety zones
+    #     ax.add_patch(Circle((0, 0), 1.0, color='blue', alpha=0.1))      # vehicle start clearance
+    #     ax.add_patch(Circle((0, 0), 0.55, color='black', alpha=0.8))      # vehicle start clearance
+    #     ax.add_patch(Circle(target_pos, 0.5, color='green', alpha=0.1)) # finish clearance
         
-        for pgt in passTarget:
-            ax.add_patch(Circle(pgt, 0.55, color='green',alpha=0.9))
+    #     for pgt in passTarget:
+    #         ax.add_patch(Circle(pgt, 0.55, color='green',alpha=0.9))
         
-        # Draw obstacles
-        for obs in obstacles:
-            ax.add_patch(Circle(obs[:2], obs[2], fill=False, color='red'))
+    #     # Draw obstacles
+    #     for obs in obstacles:
+    #         ax.add_patch(Circle(obs[:2], obs[2], fill=False, color='red'))
         
-        ax.set_xlim((-10,grid))
-        ax.set_ylim((-10,grid))
-        ax.set_aspect('equal')
-        # ax.legend()
-        out["fig"] = fig
-        plt.show()
-    else:
-        out["fig"] = None
+    #     ax.set_xlim((-10,grid))
+    #     ax.set_ylim((-10,grid))
+    #     ax.set_aspect('equal')
+    #     # ax.legend()
+    #     out["fig"] = fig
+    #     plt.show()
+    # else:
+    #     out["fig"] = None
 
-    # # bypass gen and load pre created map
-    # file = random.choice([f for f in os.listdir('maps') if f.endswith('.pkl')])
-    # # print(file)
-    # # with open(os.path.join('maps', file), 'rb') as f: 
+    # bypass gen and load pre created map
+    file = random.choice([f for f in os.listdir('maps') if f.endswith('.pkl')])
+    print(file)
+    with open(os.path.join('maps', file), 'rb') as f: 
     # with open ("maps/env-2-3.pkl", "rb") as f:
-    #     out = pickle.load(f)
+        out = pickle.load(f)
 
 
     return out
@@ -348,7 +348,7 @@ if __name__ == "__main__":
         mapid = None
         while mapid is None or int(mapid) < 0:
             mapid = input(f"What ID to set for level {clevel} map file? : ")
-            savename = f'env-{clevel}-{mapid}.pkl'
+            savename = f'./maps/env-{clevel}-{mapid}.pkl'
             input(f'[SAVE] File : {savename}')
         
         # Save to file

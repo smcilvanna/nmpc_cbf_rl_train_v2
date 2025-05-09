@@ -23,7 +23,7 @@ class CustomLoggingCallback(BaseCallback):
     
 # Curriculum schedule
 CURRICULUM_STAGES = [
-    {"level": 1, "steps": 2e5, "name": "basic"},
+    # {"level": 1, "steps": 2e5, "name": "basic"},
     {"level": 2, "steps": 5e5, "name": "med1"},
     {"level": 2, "steps": 5e5, "name": "med2"},
     {"level": 2, "steps": 5e5, "name": "med3"},
@@ -38,20 +38,21 @@ CURRICULUM_STAGES = [
 ]
 
 retrain = False
-train_id = 5
+pc = "3x"
+train_id = 6
 retrain_id = 1
 
 
 def train():
     if retrain:
-        model = PPO.load(f"ppo_mpc_horizon_ks_{train_id}-{retrain_id-1}_trap")
+        model = PPO.load(f"ppo_mpc_horizon_{pc}_{train_id}-{retrain_id-1}_trap")
     else:
         model = None
     for stage in CURRICULUM_STAGES:
         # Create vectorized environments with ActionPersistenceWrapper
         env = make_vec_env(
             lambda: ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=stage["level"])), 
-            n_envs=12,
+            n_envs=7,
             vec_env_cls=SubprocVecEnv
         )
         
@@ -83,7 +84,7 @@ def train():
         )
         
         # Save checkpoint
-        model.save(f"ppo_mpc_horizon_ks_{train_id}-{retrain_id}_{stage['name']}")
+        model.save(f"ppo_mpc_horizon_{pc}_{train_id}-{retrain_id}_{stage['name']}")
 
 if __name__ == "__main__":
     train()
