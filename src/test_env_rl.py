@@ -222,7 +222,7 @@ if __name__ == "__main__":
     if select_model:
         model = SAC.load(select_file())
     else:
-        model = SAC.load("/home/sm/Documents/python/husky/nmpc_cbf_rl_train_v2_cbf_only/src/train_data/train2/models1/sac_cbf_3x-2-1-final.zip")
+        model = SAC.load("train_data/train2/models2/sac_cbf_3x-2-2-final.zip")
 
     while not done and step < MAX_STEPS:
         # Use Model To Set Actions (cbf parameters)

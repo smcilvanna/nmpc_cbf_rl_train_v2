@@ -10,13 +10,17 @@ from custom_env_horizon import MPCHorizonEnv
 # Curriculum schedule
 CURRICULUM_STAGES = [
     # {"level": 1, "steps": 2e6, "name": "basic"},
-    {"level": 2, "steps": 1e6, "name": "gates"}
+    {"level": 2, "steps": 5e5, "name": "gates1"},
+    {"level": 2, "steps": 5e5, "name": "gates2"},
+    {"level": 2, "steps": 5e5, "name": "gates3"},
+    {"level": 2, "steps": 5e5, "name": "gates4"},
+    {"level": 2, "steps": 5e5, "name": "gates5"}
     # {"level": 3, "steps": 5e5, "name": "complex"}
 ]
 
 retrain = True
 trainid = 2
-retrainid = 2
+retrainid = 5
 SAVE_DIR = f"./train_data/train{trainid}/models{retrainid}/"
 LOG_DIR =  f"./train_data/train{trainid}/logs{retrainid}/"
 N_ENVS = 6  # Number of parallel environments
@@ -24,7 +28,7 @@ N_ENVS = 6  # Number of parallel environments
 
 def train():
     if retrain:
-        model = SAC.load('train_data/train2/models1/sac_cbf_3x-2-1-final.zip')
+        model = SAC.load('train_data/train2/models4/sac_cbf_3x-2-4-final.zip')
     else:
         model = None
     for stage in CURRICULUM_STAGES:
