@@ -5,7 +5,7 @@ import glob
 rew_values = []
 actor_loss = []
 critic_loss = []
-folder_path = "train_data/old/train2"
+folder_path = "train_data/train6"
 for filename in sorted(glob.glob(f"{folder_path}/*.txt")):
     print(filename)
     with open(filename, "r") as f:

@@ -204,7 +204,7 @@ if __name__ == "__main__":
         print(f"\n=== Episode {ep+1} ===")
         print(f"Initial observation: {obs[:4]}... (truncated)")
         log = []
-        action = 10
+        action = 3
         add = -0
         while not done and step < MAX_STEPS:
             # Take  action that sets horizon length (will only be applied every `PERSIST_STEPS` steps)

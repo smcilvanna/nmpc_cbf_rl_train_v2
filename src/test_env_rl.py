@@ -171,21 +171,21 @@ def plotSimdataAnimated(ep,env):
 if __name__ == "__main__":
     # Manual test configuration
     MAX_STEPS = 1000  # Reduce steps for easier debugging
-    PERSIST_STEPS = 10  # Test action persistence interval
+    PERSIST_STEPS = 5  # Test action persistence interval
     
     # Create wrapped environment
     env = ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=2), persist_steps=PERSIST_STEPS)
-    with open('./env-2-4.pkl', 'rb') as f: 
-        map = pickle.load(f)
+    # with open('./env-2-4.pkl', 'rb') as f: 
+    #     map = pickle.load(f)
 
-    obs, _ = env.reset(map=map)
+    obs, _ = env.reset()
     done = False
     step = 0
     last_action = None
     action_counter = 0
     
     # Load Horizon Prediction Model
-    model = PPO.load("train_data/ppo_mpc_horizon_ks_4-1_med4.zip")
+    model = PPO.load("train_data/train6/ppo_mpc_horizon_3x_6-1_med5.zip")
 
     # print(f"Initial observation: {obs[:4]}... (truncated)")
     log = []
