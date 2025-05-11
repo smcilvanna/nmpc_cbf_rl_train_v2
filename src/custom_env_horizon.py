@@ -44,7 +44,7 @@ class MPCHorizonEnv(gym.Env):
         self.observation_space = gym.spaces.Box(
             low=-np.inf, 
             high=np.inf,
-            shape=(4 + 20*3 + 2,),
+            shape=(4 + 4*3 + 2,),
             dtype=np.float32
         )
         
@@ -138,9 +138,13 @@ class MPCHorizonEnv(gym.Env):
         # horizon_changed = True if (self.current_horizon == self.last_horizon or self.last_horizon == None) else False
         # Solve MPC  <<<<<<<<<<<<<< ADD CBF CUSTOM PREDICT HERE
         t = time()
-        u = self.nmpc.solve(self.current_pos, self.cbf_per_obs)
-        mpc_time = time() - t
-        
+        try:
+            u = self.nmpc.solve(self.current_pos, self.cbf_per_obs)
+            mpc_time = time() - t
+        except:
+            print("[WARN] Solver Fail Controller Output Zeroed")
+            u = np.zeros(2)
+            mpc_time = 0.5
         # Update state and velocity
         self.current_pos = self.nmpc.stateHorizon[0,:]
         self.add_velocity(u[0])

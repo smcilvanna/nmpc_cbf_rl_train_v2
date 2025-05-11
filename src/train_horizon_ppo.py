@@ -23,28 +23,21 @@ class CustomLoggingCallback(BaseCallback):
     
 # Curriculum schedule
 CURRICULUM_STAGES = [
-    {"level": 1, "steps": 2e5, "name": "basic"},
-    {"level": 2, "steps": 5e5, "name": "med1"},
-    {"level": 2, "steps": 5e5, "name": "med2"},
-    {"level": 2, "steps": 5e5, "name": "med3"},
-    {"level": 2, "steps": 5e5, "name": "med4"},
+    # {"level": 1, "steps": 2e5, "name": "basic"},
     {"level": 2, "steps": 5e5, "name": "med5"},
     {"level": 2, "steps": 5e5, "name": "med6"},
     {"level": 2, "steps": 5e5, "name": "med7"},
-    {"level": 2, "steps": 5e5, "name": "med8"},
-    {"level": 2, "steps": 5e5, "name": "med9"},
-    {"level": 2, "steps": 5e5, "name": "med10"}
     # {"level": 3, "steps": 5e5, "name": "complex"}
 ]
 
-retrain = False
+retrain = True
 train_id = 5
 retrain_id = 1
 
 
 def train():
     if retrain:
-        model = PPO.load(f"ppo_mpc_horizon_ks_{train_id}-{retrain_id-1}_trap")
+        model = PPO.load(f"ppo_mpc_horizon_ks_{train_id}-{retrain_id}_med4")
     else:
         model = None
     for stage in CURRICULUM_STAGES:
