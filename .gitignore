@@ -7,7 +7,7 @@ src/.temp/
 src/__pycache__/
 *.vscode/
 *tensorboard*/
-
+train_data/
 
 #Ignore file types
 *.jpg
