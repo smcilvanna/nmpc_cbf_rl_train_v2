@@ -96,6 +96,96 @@ def plotSimdata(simdata,env):
 
     plt.show()
 
+
+def plotSimdata2(simdata,env):
+
+    ob = env['obstacles']
+    target = env['target_pos']
+    # rewards = ep.rewards[:-1]
+    # finalReward = ep.rewards[-1]
+   
+    fig = plt.figure(figsize=(10, 6))
+    
+    ax1 = plt.subplot2grid((2, 3), (0, 0), rowspan=2, colspan=2)
+    ax2 = plt.subplot2grid((2, 3), (0, 2))
+    ax3 = plt.subplot2grid((2, 3), (1, 2))
+
+    ax1.axis('square')
+
+    # # Simdata Spec
+    # log_row = env.current_pos.tolist()  # [0:3]     (3)
+    # log_row.extend(info["u"].tolist())  # [3:5]     (2)         5         6            7           8                  9        10        11       12         13        14         15        16
+    # log_row.extend(next_obs.tolist())   # [5:17]    (12)    [mpc_time, target_dist, target_sin, target_cos] + obs*(obs_dist, obs_sin, obs_cos  obs_rad) + (lin_vel ave_lin_vel, sin(yaw) cos(yaw))
+    # log_row.extend([reward])            # [17]      (1)
+    # log_row.extend([env.nmpc.currentN]) # [18]      (1)
+    # log_row.extend(action.tolist())     # [19]      (1)     Size of obsstacle_attention
+
+    # Position Plot
+    t = np.arange(simdata.shape[0]).reshape(-1, 1)
+    mpct = simdata[:,5]*1000     # scaled to ms
+    x = simdata[:,0]
+    y = simdata[:,1]
+    th = simdata[:,2]
+    v = simdata[:,3]
+    w = simdata[:,4]
+    r = simdata[:,17] #simdata[:,7] 
+    # s[0] = s[1]
+    n = simdata[:,18]
+    a = simdata[:,19]
+
+    # XY position plot
+    ax1.scatter(x, y,s=1)      # Plots y versus x as a line
+    ax1.add_patch(Circle(simdata[-1,0:2], 0.55, color='black', alpha=0.9, label="vehicle"))
+    ax1.add_patch(Circle(target[0:2], 0.2, color='green', alpha=0.9))
+    for i in range(ob.shape[0]):
+        ax1.add_patch(Circle( ob[i,0:2], ob[i,2], color='red')) 
+
+    
+    # reward plot
+    # ax3.plot(t,r, label="reward")
+    
+    # vehicle controls plot
+    ax2.plot(t,v, label="v (m/s)")
+    ax2.set_ylim(-0.1,1.1)
+    ax2b = ax2.twinx()
+    ax2b.plot(t,w, label=r'$\omega$ (rad/s)', color='orange')
+    ax2b.set_ylim(-1,1)
+    
+    # mpc time plot
+    ax3.plot(t,mpct, label="mpc_time")
+    # ax5.plot(t,n, label="NMPC-N")
+    # ax5.set_ylim(0, 100)
+    ax3b = ax3.twinx()
+    ax3b.plot(t, a, label="action", color='orange')
+    ax3b.set_ylim(0, 1)
+
+    # Set axis limits for ax1
+    lim = np.max(target[0:2])
+    ax1.set_xlim(0, lim)
+    ax1.set_ylim(0, lim)
+
+    # Set axis labels
+    ax1.set_xlabel('X position')
+    ax1.set_ylabel('Y position')
+    ax2.set_xlabel('Simulation Step')
+    ax2.set_ylabel('Solve Time (ms)')
+    ax3.set_xlabel('Simulation Step')
+    ax3.set_ylabel('Reward')
+    # ax4.set_xlabel('Simulation Step')
+    # ax4.set_ylabel('Linear Velocity')
+    # ax4b.set_ylabel('Angular Velocity', color='orange')
+    # ax5.set_xlabel('Simulation Step')
+    # ax5.set_ylabel('NMPC Horizon')
+    # ax5b.set_ylabel('CBF Action', color='orange')
+    plt.tight_layout()
+
+    # plt.figure(2)
+    # plt.plot(t[1:],rewards)
+    # plt.xlabel("Simulation Step")
+    # plt.ylabel("Reward")
+
+    plt.show()
+
 def plotSimdataAnimated(ep,env):
     
     # simdata = ep2simdata(ep)
@@ -212,12 +302,12 @@ if __name__ == "__main__":
         cnt = -10
         while not done and step < MAX_STEPS:
             # Take random action (will only be applied every `PERSIST_STEPS` steps)
-            action = np.ones((env.obstacle_attention,))*(0.5 + cnt*0.045)
+            action = np.ones((env.obstacle_attention,))*0.1
             print(action)
-            if cnt == 10:
-                cnt = -10
-            else:
-                cnt += 1 
+            # if cnt == 10:
+            #     cnt = -10
+            # else:
+            #     cnt += 1 
             next_obs, reward, done, _, info = env.step(action)
 
             # Logging
@@ -241,4 +331,4 @@ if __name__ == "__main__":
     print(f"Total Reward : {np.sum(simdata[:,17])}")
     print(f"Rewards Before Terminal : {np.sum(simdata[:-1,17])}")
 
-    plotSimdata(simdata,env.map)
+    plotSimdata2(simdata,env.map)

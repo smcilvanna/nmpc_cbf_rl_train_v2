@@ -161,7 +161,7 @@ def setGate(start_pos,dist,rad,gap,offset,ngates):
         gate = np.vstack([gate,gatei])    
     return gate, gtgt
 
-def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
+def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=20):
     # Set Target and Start Positions
 
     if curriculum_level > 2:
@@ -291,7 +291,10 @@ def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
     else:
         out["fig"] = None
 
-    
+    # bypass gen and load pre created map
+    with open('test1.pkl', 'rb') as f: 
+        out = pickle.load(f)
+
     
 
     return out
@@ -357,7 +360,7 @@ if __name__ == "__main__":
 
     input("ENTER to save file")
     # Save to file
-    with open('env1-1.pkl', 'wb') as f:
+    with open('test2.pkl', 'wb') as f:
         pickle.dump(env, f)
 
 
