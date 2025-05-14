@@ -105,98 +105,98 @@ def plotSimdata(simdata,env):
 
     plt.show()
 
-def plotSimdataAnimated(ep,env):
+# def plotSimdataAnimated(ep,env):
     
-    # simdata = ep2simdata(ep)
-    ob = env['obstacles']
-    target = env['target_pos']
+#     # simdata = ep2simdata(ep)
+#     ob = env['obstacles']
+#     target = env['target_pos']
         
-    fig = plt.figure(figsize=(10, 6))
+#     fig = plt.figure(figsize=(10, 6))
     
-    ax1 = plt.subplot2grid((2, 6), (0, 0), rowspan=2, colspan=2)
-    ax2 = plt.subplot2grid((2, 6), (0, 2), rowspan=1, colspan=2)
-    ax3 = plt.subplot2grid((2, 6), (1, 2), rowspan=1, colspan=2)
-    ax4 = plt.subplot2grid((2, 6), (0, 4), rowspan=1, colspan=2)
-    ax5 = plt.subplot2grid((2, 6), (1, 4), rowspan=1, colspan=2)
+#     ax1 = plt.subplot2grid((2, 6), (0, 0), rowspan=2, colspan=2)
+#     ax2 = plt.subplot2grid((2, 6), (0, 2), rowspan=1, colspan=2)
+#     ax3 = plt.subplot2grid((2, 6), (1, 2), rowspan=1, colspan=2)
+#     ax4 = plt.subplot2grid((2, 6), (0, 4), rowspan=1, colspan=2)
+#     ax5 = plt.subplot2grid((2, 6), (1, 4), rowspan=1, colspan=2)
 
-    # Set axis limits for ax1
-    lim = np.max(target[0:2])
-    ax1.set_xlim(0, lim)
-    ax1.set_ylim(0, lim)
+#     # Set axis limits for ax1
+#     lim = np.max(target[0:2])
+#     ax1.set_xlim(0, lim)
+#     ax1.set_ylim(0, lim)
 
-    # Set axis labels
-    ax1.set_xlabel('X position')
-    ax1.set_ylabel('Y position')
-    ax2.set_xlabel('Simulation Step')
-    ax2.set_ylabel('Solve Time (ms)')
-    ax3.set_xlabel('Simulation Step')
-    ax3.set_ylabel('Min Obs Separation (m)')
-    ax4.set_xlabel('Simulation Step')
-    ax4.set_ylabel('Velocity Controls')
-    ax5.set_xlabel('Simulation Step')
-    ax5.set_ylabel('Solver Horizon')
+#     # Set axis labels
+#     ax1.set_xlabel('X position')
+#     ax1.set_ylabel('Y position')
+#     ax2.set_xlabel('Simulation Step')
+#     ax2.set_ylabel('Solve Time (ms)')
+#     ax3.set_xlabel('Simulation Step')
+#     ax3.set_ylabel('Min Obs Separation (m)')
+#     ax4.set_xlabel('Simulation Step')
+#     ax4.set_ylabel('Velocity Controls')
+#     ax5.set_xlabel('Simulation Step')
+#     ax5.set_ylabel('Solver Horizon')
 
-    # Initialize plots with empty data that will be filled during animation
-    scatter = ax1.scatter([], [], s=10, color='blue')
-    vehicle_circle = Circle((0, 0), 0.55, color='black', alpha=0.9)
-    ax1.add_patch(vehicle_circle)
-    target_circle = Circle(target[0:2], 0.2, color='green', alpha=0.9)
-    ax1.add_patch(target_circle)
+#     # Initialize plots with empty data that will be filled during animation
+#     scatter = ax1.scatter([], [], s=10, color='blue')
+#     vehicle_circle = Circle((0, 0), 0.55, color='black', alpha=0.9)
+#     ax1.add_patch(vehicle_circle)
+#     target_circle = Circle(target[0:2], 0.2, color='green', alpha=0.9)
+#     ax1.add_patch(target_circle)
     
-    # Add obstacles
-    for obs in ob:
-        circle = Circle(obs[0:2], obs[2], color='red')
-        ax1.add_patch(circle)
+#     # Add obstacles
+#     for obs in ob:
+#         circle = Circle(obs[0:2], obs[2], color='red')
+#         ax1.add_patch(circle)
 
-    # Initialize empty line plots
-    line_mpct, = ax2.plot([], [], label='mpc_time')
-    line_s, = ax3.plot([], [], label='min sep')
-    hlines = ax3.hlines(0, simdata[0,0], simdata[-1,0], colors='red')
-    line_v, = ax4.plot([], [], label='Linear (m/s)')
-    line_w, = ax4.plot([], [], label='Angular (rad/s)')
-    line_n, = ax5.plot([], [], label='Solver Horizon')
+#     # Initialize empty line plots
+#     line_mpct, = ax2.plot([], [], label='mpc_time')
+#     line_s, = ax3.plot([], [], label='min sep')
+#     hlines = ax3.hlines(0, simdata[0,0], simdata[-1,0], colors='red')
+#     line_v, = ax4.plot([], [], label='Linear (m/s)')
+#     line_w, = ax4.plot([], [], label='Angular (rad/s)')
+#     line_n, = ax5.plot([], [], label='Solver Horizon')
 
-    # Set the axis limits based on the full data range
-    ax2.set_xlim(simdata[0,0], simdata[-1,0])
-    ax3.set_xlim(simdata[0,0], simdata[-1,0])
-    ax4.set_xlim(simdata[0,0], simdata[-1,0])
-    ax4.set_xlim(simdata[0,0], simdata[-1,0])
-    ax5.set_xlim(simdata[0,0], simdata[-1,0])
+#     # Set the axis limits based on the full data range
+#     ax2.set_xlim(simdata[0,0], simdata[-1,0])
+#     ax3.set_xlim(simdata[0,0], simdata[-1,0])
+#     ax4.set_xlim(simdata[0,0], simdata[-1,0])
+#     ax4.set_xlim(simdata[0,0], simdata[-1,0])
+#     ax5.set_xlim(simdata[0,0], simdata[-1,0])
 
-    ax2.set_ylim(0, np.max(simdata[:,1]*1000)*1.1)
-    ax3.set_ylim(0, np.max(simdata[:,7])*1.1)
-    ax4.set_ylim(np.min([simdata[:,5],simdata[:,6]])*1.1, np.max([simdata[:,5],simdata[:,6]])*1.1)
-    ax5.set_ylim(np.min(simdata[:,8])*1.1, np.max(simdata[:,8])*1.1)
+#     ax2.set_ylim(0, np.max(simdata[:,1]*1000)*1.1)
+#     ax3.set_ylim(0, np.max(simdata[:,7])*1.1)
+#     ax4.set_ylim(np.min([simdata[:,5],simdata[:,6]])*1.1, np.max([simdata[:,5],simdata[:,6]])*1.1)
+#     ax5.set_ylim(np.min(simdata[:,8])*1.1, np.max(simdata[:,8])*1.1)
 
-    # Add legends
-    ax2.legend()
-    ax3.legend()
-    ax4.legend()
-    ax4.legend()
+#     # Add legends
+#     ax2.legend()
+#     ax3.legend()
+#     ax4.legend()
+#     ax4.legend()
 
-    # Define the update function for animation
-    def update(frame):
-        # Update scatter trail showing vehicle path
-        scatter.set_offsets(np.c_[simdata[:frame,2], simdata[:frame,3]])
-        # Update vehicle position
-        vehicle_circle.center = (simdata[frame,2], simdata[frame,3])
+#     # Define the update function for animation
+#     def update(frame):
+#         # Update scatter trail showing vehicle path
+#         scatter.set_offsets(np.c_[simdata[:frame,2], simdata[:frame,3]])
+#         # Update vehicle position
+#         vehicle_circle.center = (simdata[frame,2], simdata[frame,3])
 
-        # Update time series plots
-        line_mpct.set_data(simdata[:frame,0], simdata[:frame,1]*1000)
-        line_s.set_data(simdata[:frame,0], simdata[:frame,7])
-        line_v.set_data(simdata[:frame,0], simdata[:frame,5])
-        line_w.set_data(simdata[:frame,0], simdata[:frame,6])
-        line_n.set_data(simdata[:frame,0], simdata[:frame,8])
+#         # Update time series plots
+#         line_mpct.set_data(simdata[:frame,0], simdata[:frame,1]*1000)
+#         line_s.set_data(simdata[:frame,0], simdata[:frame,7])
+#         line_v.set_data(simdata[:frame,0], simdata[:frame,5])
+#         line_w.set_data(simdata[:frame,0], simdata[:frame,6])
+#         line_n.set_data(simdata[:frame,0], simdata[:frame,8])
 
-        return scatter, vehicle_circle, line_mpct, line_s, line_v, line_w, line_n
+#         return scatter, vehicle_circle, line_mpct, line_s, line_v, line_w, line_n
 
-    # Create animation
-    ani = FuncAnimation(fig, update, frames=len(simdata), interval=100, blit=True)
+#     # Create animation
+#     ani = FuncAnimation(fig, update, frames=len(simdata), interval=100, blit=True)
 
-    plt.tight_layout()
-    plt.show()
+#     plt.tight_layout()
+#     plt.show()
     
-    return ani  # Return animation object to prevent garbage collection
+#     return ani  # Return animation object to prevent garbage collection
 
 
 if __name__ == "__main__":
@@ -211,9 +211,8 @@ if __name__ == "__main__":
     last_action = None
     action_counter = 0
     
-    print(f"Initial observation: {obs[:4]}... (truncated)")
+    # print(f"Initial observation: {obs[:4]}... (truncated)")
     log = []
-    cnt = -10
 
     # Load Horizon Prediction Model
     # modelfile = 
@@ -221,16 +220,12 @@ if __name__ == "__main__":
     if select_model:
         model = SAC.load(select_file())
     else:
-        model = SAC.load("train_data/train2/models4/sac_cbf_3x-2-4-final.zip")
+        model = SAC.load("train_data/train2/models5/sac_cbf_3x-2-5-final.zip")
 
     while not done and step < MAX_STEPS:
         # Use Model To Set Actions (cbf parameters)
         action, _ = model.predict(obs, deterministic=True)#np.ones((env.obstacle_attention,))*(0.5 + cnt*0.045)
         print("cbf action " , action)
-        if cnt == 10:
-            cnt = -10
-        else:
-            cnt += 1 
         next_obs, reward, done, _, info = env.step(action)
 
         # Logging
@@ -253,3 +248,7 @@ if __name__ == "__main__":
     print(f"Total Reward : {np.sum(simdata[:,17])}")
     print(f"Rewards Before Terminal : {np.sum(simdata[:-1,17])}")
     plotSimdata(simdata,env.map)
+
+    input("Enter To save to file")
+    with open('test_data/data-0.4-sac.pkl', 'wb') as f:
+        pickle.dump(simdata, f)
