@@ -264,10 +264,7 @@ if __name__ == "__main__":
         # action, _ = model.predict(obs, deterministic=True)#np.ones((env.obstacle_attention,))*(0.5 + cnt*0.045)
         action = ocbf
         print("cbf action " , action)
-        if cnt == 10:
-            cnt = -10
-        else:
-            cnt += 1 
+
         next_obs, reward, done, _, info = env.step(action)
 
         # Logging
@@ -290,3 +287,30 @@ if __name__ == "__main__":
     print(f"Total Reward : {np.sum(simdata[:,17])}")
     print(f"Rewards Before Terminal : {np.sum(simdata[:-1,17])}")
     plotSimdata(simdata,env.map)
+
+# Values from TD3 Rl model for manual tests
+# Obstacle Value 0, Normal CBF -0.10920000076293945  | Obstacle radius 0.2, CBF Value 0.3145
+# Obstacle Value 1, Normal CBF -0.36629998683929443  | Obstacle radius 0.4, CBF Value 0.2252
+# Obstacle Value 2, Normal CBF -0.4293000102043152  | Obstacle radius 0.6, CBF Value 0.2033
+# Obstacle Value 3, Normal CBF -0.7164999842643738  | Obstacle radius 0.8, CBF Value 0.1035
+# Obstacle Value 4, Normal CBF -0.6891999840736389  | Obstacle radius 1.0, CBF Value 0.113
+# Obstacle Value 5, Normal CBF -0.7167999744415283  | Obstacle radius 1.2, CBF Value 0.1034
+# Obstacle Value 6, Normal CBF -0.8062000274658203  | Obstacle radius 1.4, CBF Value 0.0723
+# Obstacle Value 7, Normal CBF -0.823199987411499  | Obstacle radius 1.6, CBF Value 0.0664
+# Obstacle Value 8, Normal CBF -0.8104000091552734  | Obstacle radius 1.8, CBF Value 0.0709
+# Obstacle Value 9, Normal CBF -0.8402000069618225  | Obstacle radius 2.0, CBF Value 0.0605
+# Obstacle Value 10, Normal CBF -0.8633000254631042  | Obstacle radius 2.2, CBF Value 0.0525
+# Obstacle Value 11, Normal CBF -0.8489000201225281  | Obstacle radius 2.4, CBF Value 0.0575
+# Obstacle Value 12, Normal CBF -0.8428000211715698  | Obstacle radius 2.6, CBF Value 0.0596
+# Obstacle Value 13, Normal CBF -0.8704000115394592  | Obstacle radius 2.8, CBF Value 0.05
+# Obstacle Value 14, Normal CBF -0.8517000079154968  | Obstacle radius 3.0, CBF Value 0.0565
+# Obstacle Value 15, Normal CBF -0.8791999816894531  | Obstacle radius 3.2, CBF Value 0.047
+# Obstacle Value 16, Normal CBF -0.852400004863739  | Obstacle radius 3.4, CBF Value 0.0563
+# Obstacle Value 17, Normal CBF -0.8815000057220459  | Obstacle radius 3.6, CBF Value 0.0462
+# Obstacle Value 18, Normal CBF -0.8837000131607056  | Obstacle radius 3.8, CBF Value 0.0454
+# Obstacle Value 19, Normal CBF -0.8751000165939331  | Obstacle radius 4.0, CBF Value 0.0484
+# Obstacle Value 20, Normal CBF -0.9007999897003174  | Obstacle radius 4.2, CBF Value 0.0395
+# Obstacle Value 21, Normal CBF -0.8986999988555908  | Obstacle radius 4.4, CBF Value 0.0402
+# Obstacle Value 22, Normal CBF -0.9244999885559082  | Obstacle radius 4.6, CBF Value 0.0312
+# Obstacle Value 23, Normal CBF -0.8741999864578247  | Obstacle radius 4.8, CBF Value 0.0487
+# Obstacle Value 24, Normal CBF -0.9085999727249146  | Obstacle radius 5.0, CBF Value 0.0368
