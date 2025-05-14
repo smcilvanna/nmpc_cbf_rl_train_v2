@@ -174,8 +174,8 @@ def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=20):
         gateDist = 15
         gateOffset = 0.0
         nGates = 1
-        obsRad = np.round(np.random.uniform(0.1,10.1),1)
-        gateGap = -obsRad*np.random.uniform(1.9, 2.001)
+        obsRad = 4.8 #np.round(np.random.uniform(0.2,10.1),1)
+        gateGap = -obsRad*2 #np.random.uniform(1.9, 2.001)
         while abs(gateOffset)  < 0.05:
             gateOffset = np.random.uniform(-(obsRad*0.7),(obsRad*0.7)) 
         
@@ -292,7 +292,7 @@ def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=20):
         out["fig"] = None
 
     # bypass gen and load pre created map
-    with open('test1.pkl', 'rb') as f: 
+    with open('test_data/test-1_obs-0.4.pkl', 'rb') as f: 
         out = pickle.load(f)
 
     
@@ -358,9 +358,11 @@ if __name__ == "__main__":
 
     env = genCurEnv_2(curriculum_level=1 , gen_fig=True)
 
+    print(env)
+
     input("ENTER to save file")
     # Save to file
-    with open('test2.pkl', 'wb') as f:
+    with open('test_data/test-1_obs-4.8.pkl', 'wb') as f:
         pickle.dump(env, f)
 
 
