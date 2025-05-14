@@ -167,6 +167,7 @@ def plotSimdata2(simdata,env):
     # Set axis labels
     ax1.set_xlabel('X position')
     ax1.set_ylabel('Y position')
+    ax1.set_title(f"Obstacle Radius {round(ob[0,2],1)} m")
     ax2.set_xlabel('Simulation Step')
     ax2.set_ylabel('Solve Time (ms)')
     ax3.set_xlabel('Simulation Step')
@@ -288,6 +289,7 @@ if __name__ == "__main__":
     
     # Create wrapped environment
     env = MPCHorizonEnv(curriculum_level=2)
+
     
     for ep in range(TEST_EPISODES):
         obs, _ = env.reset()
@@ -302,7 +304,7 @@ if __name__ == "__main__":
         cnt = -10
         while not done and step < MAX_STEPS:
             # Take random action (will only be applied every `PERSIST_STEPS` steps)
-            action = np.ones((env.obstacle_attention,))*0.1
+            action = np.ones((env.obstacle_attention,))*0.01
             print(action)
             # if cnt == 10:
             #     cnt = -10
@@ -327,6 +329,10 @@ if __name__ == "__main__":
     
     # Plot run
     simdata = np.array(log)
+
+    import pickle
+    with open('test_data/data-0.4-cbf-0.01.pkl', 'wb') as f:
+        pickle.dump(simdata, f)
     
     print(f"Total Reward : {np.sum(simdata[:,17])}")
     print(f"Rewards Before Terminal : {np.sum(simdata[:-1,17])}")
