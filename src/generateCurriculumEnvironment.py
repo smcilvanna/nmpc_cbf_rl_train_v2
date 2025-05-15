@@ -169,8 +169,8 @@ def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
         gateDist = 10
         gateOffset = 0.0
         nGates = 1
-        obsRad = np.round(np.random.uniform(0.5,5.1),1)
-        gateGap = -obsRad*np.random.uniform(1.9, 2.001)
+        obsRad = 4.0 #np.round(np.random.uniform(0.5,5.1),1)
+        gateGap = -obsRad*2 #np.random.uniform(1.9, 2.001)
         while abs(gateOffset)  < 0.05:
             gateOffset = np.random.uniform(-(obsRad*0.7),(obsRad*0.7)) 
         
@@ -179,9 +179,9 @@ def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
         grid = 20
         gateDist = np.round(np.random.uniform(8,12))
         nGates = 1
-        obsRad = np.round(np.random.uniform(1.0,3.1),1) # changed from 10
-        gateGap = -obsRad*np.random.uniform(0, 0.5)
-        gateOffset = 0.0
+        obsRad = 4.4 #np.round(np.random.uniform(1.0,3.1),1) # changed from 10
+        gateGap = -obsRad #*np.random.uniform(0, 0.5)
+        gateOffset = 0.15
         while abs(gateOffset)  < 0.1:
             gateOffset = np.round(np.random.uniform(-(obsRad*0.95),(obsRad*0.95)),1)
     elif curriculum_level == 3:
@@ -251,12 +251,14 @@ def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
     
     startDist = np.linalg.norm(target_pos)
 
-    out = {
-        'target_pos': target_pos,
-        'obstacles': obstacles,
-        'pass_targets' : passTarget,
-        'startDist' : startDist
-        }
+    # out = {
+    #     'target_pos': target_pos,
+    #     'obstacles': obstacles,
+    #     'pass_targets' : passTarget,
+    #     'startDist' : startDist
+    #     }
+    with open ("test_data/env-2-3.pkl", "rb") as f:
+        out = pickle.load(f)
 
 
     if gen_fig:
