@@ -55,6 +55,8 @@ class MPCHorizonEnv(gym.Env):
         #CBF Parameters
         self.cbf1 = None
         self.cbf2 = None
+        self.cbf3 = None
+        self.cbf4 = None
 
     def add_velocity(self,v):
         self.past_lin_vels.append(v)
@@ -74,7 +76,8 @@ class MPCHorizonEnv(gym.Env):
         self.nmpc.setTarget(self.map['target_pos'])
         self.current_pos = np.array([0.0, 0.0, self.map['target_pos'][2]])
         self.nmpc.reset_nmpc(self.current_pos)
-        # self.cbf_per_obs = self.get_cbf_values(self.map['obstacles'])
+        self.cbf_per_obs = self.get_cbf_values(self.map['obstacles'])
+        print(type(self.cbf_per_obs), self.cbf_per_obs.shape)
         init_obs, _ = self._get_obs()
 
 
@@ -182,9 +185,11 @@ class MPCHorizonEnv(gym.Env):
             # print("Horizon Changed")
         # horizon_changed = True if (self.current_horizon == self.last_horizon or self.last_horizon == None) else False
         # Solve MPC  <<<<<<<<<<<<<< ADD CBF CUSTOM PREDICT HERE
+        
+        cbf_values = np.array([self.cbf1, self.cbf2, self.cbf3, self.cbf4])
         t = time()
         try:
-            u = self.nmpc.solve(self.current_pos, self.cbf_per_obs)
+            u = self.nmpc.solve(self.current_pos, cbf_values)
             mpc_time = time() - t
         except:
             print("[WARN] Solver Fail Controller Output Zeroed")
