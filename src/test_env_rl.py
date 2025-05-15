@@ -175,23 +175,25 @@ if __name__ == "__main__":
     
     # Create wrapped environment
     env = ActionPersistenceWrapper(MPCHorizonEnv(curriculum_level=2), persist_steps=PERSIST_STEPS)
-    with open('./env-2-4.pkl', 'rb') as f: 
-        map = pickle.load(f)
+    # with open('./env-2-4.pkl', 'rb') as f: 
+    #     map = pickle.load(f)
 
-    obs, _ = env.reset(map=map)
+    obs, _ = env.reset(map=None)
     done = False
     step = 0
     last_action = None
     action_counter = 0
     
     # Load Horizon Prediction Model
-    model = PPO.load("train_data/ppo_mpc_horizon_ks_4-1_med4.zip")
+    # model = PPO.load("train_data/train5/ppo_mpc_horizon_ks_5-1_med7.zip")
+    model = PPO.load("train_data/train6-set/ppo_mpc_horizon_3x_6-1_med5.zip")
 
     # print(f"Initial observation: {obs[:4]}... (truncated)")
     log = []
     while not done and step < MAX_STEPS:
         # Take random action (will only be applied every `PERSIST_STEPS` steps)
-        action, _ = model.predict(obs, deterministic=True) #env.action_space.sample()
+        # action, _ = model.predict(obs, deterministic=True) #env.action_space.sample()
+        action = 1
         # action = 13
         next_obs, reward, done, _, info = env.step(action)
 
@@ -217,3 +219,9 @@ print(f"Total Reward : {np.sum(simdata[:,-2])}")
 print(f"Rewards Before Terminal : {np.sum(simdata[:-1,-2])}")
 
 plotSimdata(simdata,env.env.map)
+
+print("\n\n\########################\n")
+savename = input("Filename to save : ")
+# Save to file
+with open(f"test_data/{savename}.pkl", 'wb') as f:
+    pickle.dump(simdata, f)
