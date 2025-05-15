@@ -1,10 +1,10 @@
 import numpy as np
-from custom_env_horizon import MPCHorizonEnv, ActionPersistenceWrapper
+from custom_env_horizon_cbf import MPCHorizonEnv, ActionPersistenceWrapper
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.animation import FuncAnimation
 import pickle
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, SAC
 
 
 def plotSimdata(simdata,env):
@@ -187,13 +187,17 @@ if __name__ == "__main__":
     # Load Horizon Prediction Model
     # model = PPO.load("train_data/train5/ppo_mpc_horizon_ks_5-1_med7.zip")
     model = PPO.load("train_data/train6-set/ppo_mpc_horizon_3x_6-1_med5.zip")
+    model_cbf = SAC.load("train_data/cbf/sac_cbf_3x-2-5-final.zip")
 
     # print(f"Initial observation: {obs[:4]}... (truncated)")
     log = []
     while not done and step < MAX_STEPS:
         # Take random action (will only be applied every `PERSIST_STEPS` steps)
-        # action, _ = model.predict(obs, deterministic=True) #env.action_space.sample()
-        action = 1
+        action, _ = model.predict(obs, deterministic=True) #env.action_space.sample()
+        env.env.cbf1 = model_cbf.predict(env.env.cbf1_obs,deterministic=True)
+        env.env.cbf2 = model_cbf.predict(env.env.cbf2_obs, deterministic=True)
+        
+        # action = 1
         # action = 13
         next_obs, reward, done, _, info = env.step(action)
 
@@ -220,8 +224,8 @@ print(f"Rewards Before Terminal : {np.sum(simdata[:-1,-2])}")
 
 plotSimdata(simdata,env.env.map)
 
-print("\n\n\########################\n")
-savename = input("Filename to save : ")
-# Save to file
-with open(f"test_data/{savename}.pkl", 'wb') as f:
-    pickle.dump(simdata, f)
+# print("\n\n\########################\n")
+# savename = input("Filename to save : ")
+# # Save to file
+# with open(f"test_data/{savename}.pkl", 'wb') as f:
+#     pickle.dump(simdata, f)

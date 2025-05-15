@@ -52,6 +52,10 @@ class MPCHorizonEnv(gym.Env):
         self.nmpc = NMPC_CBF_MULTI_N(0.1, self.horizon_options, nObs=4)
         # self.reset()
 
+        #CBF Parameters
+        self.cbf1 = None
+        self.cbf2 = None
+
     def add_velocity(self,v):
         self.past_lin_vels.append(v)
         self.av_lin_vel = sum(self.past_lin_vels)/len(self.past_lin_vels)
@@ -70,7 +74,7 @@ class MPCHorizonEnv(gym.Env):
         self.nmpc.setTarget(self.map['target_pos'])
         self.current_pos = np.array([0.0, 0.0, self.map['target_pos'][2]])
         self.nmpc.reset_nmpc(self.current_pos)
-        self.cbf_per_obs = self.get_cbf_values(self.map['obstacles'])
+        # self.cbf_per_obs = self.get_cbf_values(self.map['obstacles'])
         init_obs, _ = self._get_obs()
 
 
@@ -85,6 +89,12 @@ class MPCHorizonEnv(gym.Env):
         # Calculate angle between deadlock and pass points
         self.radang = abs(np.arctan2(self.pass_tgt[1], self.pass_tgt[0]) - np.arctan2(self.mid[1], self.mid[0]))
         self.passpoint = False
+
+        self.cbf1_obs = self._get_obs_cbf(self.map["obstacles"][0],50.0)
+        self.cbf2_obs = self._get_obs_cbf(self.map["obstacles"][1],50.0)
+        self.cbf3_obs = self._get_obs_cbf(self.map["obstacles"][2],50.0)
+        self.cbf4_obs = self._get_obs_cbf(self.map["obstacles"][3],50.0)
+
         return init_obs, {}
 
     def get_cbf_values(self,obstacles):
@@ -129,6 +139,41 @@ class MPCHorizonEnv(gym.Env):
         self.min_obs_dist = min_obs_dist
         return np.array(obs_list, dtype=np.float32), min_obs_dist
 
+    def _get_obs_cbf(self, obstacle, mpc_time=0.0,):
+        """Simplified observation vector"""
+        # Initialize as list
+        obs_list = []
+        
+        # 1. MPC performance [0]
+        obs_list.append(np.clip(mpc_time,0.0,1.0))  # Normalised [0-1] max 1 second
+        
+        # 2. Target information [1:4]
+        target_vec = self.map['target_pos'][:2] - self.current_pos[:2]
+        target_dist = np.linalg.norm(target_vec)
+        target_dist = np.clip(target_dist/50,0.0,1.0)   # Normalised [0-1] max 50m
+        target_angle = np.arctan2(target_vec[1], target_vec[0])
+        obs_list.extend([target_dist, np.sin(target_angle), np.cos(target_angle)])
+        
+        # 3. Obstacle information
+        vec = obstacle[:2] - self.current_pos[:2]
+        dist = np.linalg.norm(vec) - 0.55 - obstacle[2]
+        dist = np.clip(dist/50, 0.0, 1.0)   # Normalised [0-1] max 50 m
+        angle = np.arctan2(vec[1], vec[0])
+        obs_list.extend([dist, np.sin(angle), np.cos(angle), obstacle[2]])
+
+        # 4. Velocities, current average [13:15]
+        if len(self.past_lin_vels) > 0:
+            obs_list.extend([self.past_lin_vels[-1]])
+            obs_list.extend([self.av_lin_vel])
+        else:
+            obs_list.extend([0.0,0.0])
+
+        # 5. Current yaw angle
+        obs_list.extend([np.sin(self.current_pos[2]), np.cos(self.current_pos[2])])
+
+        # Convert to numpy array at the end
+        return np.array(obs_list, dtype=np.float32)
+
     def step(self, action):
         # If horizon action changes current horizon adjust it in nmpc
         if self.current_horizon != self.horizon_options[action]:
@@ -150,6 +195,16 @@ class MPCHorizonEnv(gym.Env):
         self.add_velocity(u[0])
         
         observations, min_obs_dist = self._get_obs(mpc_time)
+
+        self.cbf1_obs = self._get_obs_cbf(self.map["obstacles"][0],mpc_time)
+        self.cbf2_obs = self._get_obs_cbf(self.map["obstacles"][1],mpc_time)
+        self.cbf3_obs = self._get_obs_cbf(self.map["obstacles"][2],mpc_time)
+        self.cbf4_obs = self._get_obs_cbf(self.map["obstacles"][3],mpc_time)
+
+        # print(cbf1_obs)
+        # print(cbf2_obs)
+        # print(cbf3_obs)
+        # print(cbf4_obs)
 
         # Calculate reward and done
         reward, done = self._calculate_reward(self.current_pos, mpc_time, min_obs_dist)

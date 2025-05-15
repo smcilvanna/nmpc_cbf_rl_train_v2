@@ -257,7 +257,7 @@ def genCurEnv_2(curriculum_level, gen_fig=False, maxObs=5):
     #     'pass_targets' : passTarget,
     #     'startDist' : startDist
     #     }
-    with open ("test_data/env-2-3.pkl", "rb") as f:
+    with open ("test_data/map-2obs-1.0.pkl", "rb") as f:
         out = pickle.load(f)
 
 
