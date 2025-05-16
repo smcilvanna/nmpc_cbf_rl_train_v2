@@ -34,13 +34,16 @@ def plotSimdata(simdata,env):
     w = simdata[:,4]
     r = simdata[:,-2] #simdata[:,7] 
     # s[0] = s[1]
-    n = simdata[:,-1]
+    n = simdata[:,-3]
+    c1 = simdata[:,-2]
+    c2 = simdata[:,-1]
 
     ax1.scatter(x, y,s=1)      # Plots y versus x as a line
     ax1.add_patch(Circle(simdata[-1,0:2], 0.55, color='black', alpha=0.9, label="vehicle"))
     ax1.add_patch(Circle(target[0:2], 0.2, color='green', alpha=0.9))
     for i in range(ob.shape[0]):
-        ax1.add_patch(Circle( ob[i,0:2], ob[i,2], color='red')) 
+        ax1.add_patch(Circle( ob[i,0:2], ob[i,2], color='red'))
+        ax1.text(ob[i,0],ob[i,1],f"obs-{i+1}")
 
     ax2.plot(t,mpct, label="mpc_time")
     ax3.plot(t,r, label="reward")
@@ -48,6 +51,10 @@ def plotSimdata(simdata,env):
     ax4.plot(t,v, label="v (m/s)")
     ax4.plot(t,w, label=r'$\omega$ (rad/s)')
     ax5.plot(t,n, label="NMPC-N")
+    ax5b = ax5.twinx()
+    ax5b.plot(t,c1, label="obs1-cbf",   c='blue',   lw=1    )
+    ax5b.plot(t,c2, label="obs2-cbf",   c="cyan",    lw=1   )
+    ax5b.legend(fontsize=5)
 
     # Set axis limits for ax1
     lim = np.max(target[0:2])
@@ -65,6 +72,7 @@ def plotSimdata(simdata,env):
     ax4.set_ylabel('Velocity Controls')
     ax5.set_xlabel('Simulation Step')
     ax5.set_ylabel('Solver Horizon')
+    ax5b.set_ylabel("CBF Values")
     plt.tight_layout()
 
     # plt.figure(2)
@@ -194,9 +202,11 @@ if __name__ == "__main__":
     while not done and step < MAX_STEPS:
         # Take random action (will only be applied every `PERSIST_STEPS` steps)
         action, _ = model.predict(obs, deterministic=True) #env.action_space.sample()
-        env.env.cbf1 = model_cbf.predict(env.env.cbf1_obs,deterministic=True)
-        env.env.cbf2 = model_cbf.predict(env.env.cbf2_obs, deterministic=True)
-        
+        env.env.cbf1, _ = model_cbf.predict(env.env.cbf1_obs,   deterministic=True)
+        env.env.cbf2, _ = model_cbf.predict(env.env.cbf2_obs,   deterministic=True)
+        env.env.cbf3 = np.array([0.9999])  #model_cbf.predict(env.env.cbf3_obs, deterministic=True)
+        env.env.cbf4 = np.array([0.9999])  #model_cbf.predict(env.env.cbf4_obs, deterministic=True)
+
         # action = 1
         # action = 13
         next_obs, reward, done, _, info = env.step(action)
@@ -207,6 +217,7 @@ if __name__ == "__main__":
         log_row.extend(next_obs.tolist())
         log_row.extend([reward])
         log_row.extend([env.env.nmpc.currentN])
+        log_row.extend([env.env.cbf1[0], env.env.cbf2[0]])
         log.append(log_row)
 
         # Print step info

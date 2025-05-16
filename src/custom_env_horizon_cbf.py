@@ -186,7 +186,15 @@ class MPCHorizonEnv(gym.Env):
         # horizon_changed = True if (self.current_horizon == self.last_horizon or self.last_horizon == None) else False
         # Solve MPC  <<<<<<<<<<<<<< ADD CBF CUSTOM PREDICT HERE
         
-        cbf_values = np.array([self.cbf1, self.cbf2, self.cbf3, self.cbf4])
+
+
+        # print(type(self.cbf1))
+        # print(self.cbf2)
+        # print(self.cbf3)
+        # print(self.cbf4)
+
+        
+        cbf_values = np.concatenate([self.cbf1, self.cbf2, self.cbf3, self.cbf4])
         t = time()
         try:
             u = self.nmpc.solve(self.current_pos, cbf_values)
